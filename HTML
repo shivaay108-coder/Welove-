@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure QR Vault</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root {
+  color-scheme: dark;
+  --bg:#07111f;
+  --panel:#101f32;
+  --border:#29415d;
+  --cyan:#35e0ff;
+  --green:#47e6a1;
+  --red:#ff7185;
+  --text:#eaf5ff;
+  --muted:#9eb4cb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:15px;
+  background:radial-gradient(circle at top,#183452,var(--bg) 65%);
+  color:var(--text);font-family:Arial,sans-serif;
+}
+main{max-width:850px;margin:auto}
+h1{text-align:center;color:var(--cyan)}
+h2{font-size:19px}
+.panel{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:16px;padding:16px;margin:14px 0;
+}
+label{display:block;margin:12px 0 6px;color:#cce4ff}
+input,textarea,select{
+  width:100%;padding:12px;border-radius:9px;
+  border:1px solid var(--border);background:#071522;
+  color:white;font-size:15px;
+}
+textarea{min-height:90px;resize:vertical}
+button{
+  padding:12px;border:0;border-radius:9px;
+  margin:5px 3px;background:var(--cyan);
+  color:#06111b;font-weight:bold;cursor:pointer;
+}
+.secondary{background:#304760;color:white}
+.green{background:var(--green)}
+.red{background:var(--red)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1;min-width:120px}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.stat{flex:1;min-width:100px;padding:12px;background:#071522;border-radius:9px}
+.stat small{display:block;color:var(--muted)}
+.stat strong{display:block;font-size:21px;margin-top:6px}
+.note{color:var(--muted);font-size:13px;line-height:1.6}
+.status{
+  background:#071522;padding:10px;border-radius:8px;
+  white-space:pre-wrap;overflow-wrap:anywhere;margin-top:10px;
+}
+#qr{display:flex;justify-content:center;margin:18px auto;background:white;width:max-content;max-width:100%}
+#qr img,#qr canvas{max-width:100%;height:auto}
+.item{padding:12px;border:1px solid var(--border);border-radius:9px;margin:8px 0}
+.hidden{display:none!important}
+.good{color:var(--green)}
+.bad{color:var(--red)}
+</style>
+</head>
+<body>
+<main>
+<h1>🔐 Secure QR Vault</h1>
+<p class="note" style="text-align:center">Encrypted Messages • Same QR Record • Read Once • Auto Delete</p>
+
+<section class="panel" id="loginPanel">
+<h2>Local Account</h2>
+<label>Username</label>
+<input id="username" maxlength="40" autocomplete="username" placeholder="Username">
+<label>Password</label>
+<input id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters">
+<button onclick="register()">Create Account</button>
+<button class="secondary" onclick="login()">Login</button>
+<div id="loginStatus" class="status">Create an account or log in.</div>
+</section>
+
+<section class="panel hidden" id="appPanel">
+<div class="row">
+<div>
+<h2>My Vault</h2>
+<span class="note">User: <b id="currentUser"></b></span>
+</div>
+<button class="secondary" onclick="logout()">Logout</button>
+</div>
+
+<div class="stats">
+<div class="stat"><small>Coins</small><strong id="coins">0</strong></div>
+<div class="stat"><small>QR Records</small><strong id="recordCount">0</strong></div>
+<div class="stat"><small>History</small><strong id="historyCount">0</strong></div>
+</div>
+<button class="green" onclick="claimDaily()">Claim Daily 20,000 Coins</button>
+
+<h2>1. Create / Reuse QR</h2>
+<label>QR Record</label>
+<select id="recordSelect">
+<option value="">Create NEW QR — 100 coins</option>
+</select>
+<p class="note">New QR: 100 coins. Reuse existing QR record: 80 coins. Reuse keeps the same record ID, but the QR image must be regenerated to contain new encrypted data.</p>
+
+<label>Message</label>
+<textarea id="message" maxlength="1800" placeholder="Write your message"></textarea>
+
+<label>Encryption Passphrase</label>
+<input id="passphrase" type="password" autocomplete="new-password" placeholder="Strong passphrase">
+
+<div class="row">
+<div>
+<label>Auto-delete Timer</label>
+<select id="timer">
+<option value="60">1 minute</option>
+<option value="300">5 minutes</option>
+<option value="900">15 minutes</option>
+<option value="3600">1 hour</option>
+<option value="86400">24 hours</option>
+<option value="0">No timer</option>
+</select>
+</div>
+<div>
+<label>Read Once</label>
+<select id="readOnce">
+<option value="yes">Enabled</option>
+<option value="no">Disabled</option>
+</select>
+</div>
+</div>
+
+<button onclick="generateQR()">Encrypt & Generate QR</button>
+<button class="secondary" onclick="clearForm()">Clear Form</button>
+<div id="generateStatus" class="status">Ready.</div>
+
+<div id="qr"></div>
+<div class="row">
+<button class="green" onclick="downloadQR()">Download QR</button>
+<button class="secondary" onclick="copyPayload()">Copy Payload</button>
+<button class="secondary" onclick="sharePayload()">Share Payload</button>
+</div>
+
+<label>Encrypted Payload</label>
+<textarea id="payload" placeholder="Encrypted data appears here"></textarea>
+
+<h2>2. Decrypt Message</h2>
+<label>Encrypted Payload</label>
+<textarea id="incoming" placeholder="Paste encrypted payload here"></textarea>
+<label>Passphrase</label>
+<input id="decryptPass" type="password" autocomplete="off" placeholder="Enter passphrase">
+<button class="green" onclick="decryptMessage()">Decrypt Message</button>
+<div id="decryptStatus" class="status">Waiting for payload.</div>
+
+<label>Decrypted Message</label>
+<textarea id="decrypted" readonly placeholder="Decrypted message"></textarea>
+<button class="red" onclick="clearDecrypted()">Clear Decrypted Message</button>
+
+<h2>3. Local QR Records</h2>
+<div id="recordsList"></div>
+<button class="red" onclick="cleanup()">Run Expiry Cleanup</button>
+
+<h2>4. Backup</h2>
+<button onclick="exportBackup()">Export Backup</button>
+<label>Restore JSON Backup</label>
+<input id="backupFile" type="file" accept=".json,application/json">
+<button class="secondary" onclick="restoreBackup()">Restore Backup</button>
+
+<p class="note">
+This is a local-only application. Read Once and expiration are enforced using local browser storage. They cannot erase previously copied QR images or guarantee deletion on another device. Browser storage is not a tamper-proof security boundary. QR generation requires the QR library to load.
+</p>
+</section>
+</main>
+
+<script>
+"use strict";
+
+const DB_KEY="secure_qr_vault_data_v2";
+let db=loadDB();
+let activeUser=null;
+let currentQr=null;
+
+function loadDB(){
+  try{
+    return JSON.parse(localStorage.getItem(DB_KEY)) || {users:{}};
+  }catch(e){
+    return {users:{}};
+  }
+}
+
+function saveDB(){
+  localStorage.setItem(DB_KEY,JSON.stringify(db));
+}
+
+function $ (id){
+  return document.getElementById(id);
+}
+
+function status(id,message,ok=false){
+  $(id).textContent=message;
+  $(id).className="status "+(ok?"good":"bad");
+}
+
+function user(){
+  return activeUser ? db.users[activeUser] : null;
+}
+
+function today(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function randomId(bytes=16){
+  const arr=crypto.getRandomValues(new Uint8Array(bytes));
+  return Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+function toB64(arr){
+  let s="";
+  for(const b of arr)s+=String.fromCharCode(b);
+  return btoa(s);
+}
+
+function fromB64(s){
+  const bin=atob(s);
+  const out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);
+  return out;
+}
+
+async function passwordHash(password,salt){
+  const key=await crypto.subtle.importKey(
+    "raw",new TextEncoder().encode(password),
+    "PBKDF2",false,["deriveBits"]
+  );
+  const bits=await crypto.subtle.deriveBits({
+    name:"PBKDF2",
+    salt:fromB64(salt),
+    iterations:180000,
+    hash:"SHA-256"
+  },key,256);
+  return toB64(new Uint8Array(bits));
+}
+
+function newUser(salt,hash){
+  return {
+    salt,
+    hash,
+    coins:0,
+    lastClaim:"",
+    records:{},
+    history:[],
+    readMessages:{}
+  };
+}
+
+async function register(){
+  try{
+    if(!crypto.subtle)throw Error("Web Crypto unavailable. Open in a supported secure browser context.");
+    const name=$("username").value.trim().toLowerCase();
+    const pass=$("password").value;
+    if(!name||pass.length<6)throw Error("Enter username and a password of at least 6 characters.");
+    if(db.users[name])throw Error("Account already exists. Please log in.");
+    const salt=toB64(crypto.getRandomValues(new Uint8Array(16)));
+    const hash=await passwordHash(pass,salt);
+    db.users[name]=newUser(salt,hash);
+    activeUser=name;
+    saveDB();
+    showApp();
+  }catch(e){
+    status("loginStatus",e.message);
+  }
+}
+
+async function login(){
+  try{
+    if(!crypto.subtle)throw Error("Web Crypto unavailable. Use a supported browser context.");
+    const name=$("username").value.trim().toLowerCase();
+    const pass=$("password").value;
+    const u=db.users[name];
+    if(!u)throw Error("Account not found on this device.");
+    if(await passwordHash(pass,u.salt)!==u.hash)throw Error("Incorrect password.");
+    activeUser=name;
+    saveDB();
+    showApp();
+  }catch(e){
+    status("loginStatus",e.message);
+  }
+}
+
+function logout(){
+  activeUser=null;
+  $("appPanel").classList.add("hidden");
+  $("loginPanel").classList.remove("hidden");
+  $("password").value="";
+}
+
+function showApp(){
+  $("loginPanel").classList.add("hidden");
+  $("appPanel").classList.remove("hidden");
+  $("currentUser").textContent=activeUser;
+  cleanup(false);
+  refresh();
+}
+
+function claimDaily(){
+  const u=user();
+  if(!u)return;
+  if(u.lastClaim===today()){
+    alert("Daily coins already claimed today.");
+    return;
+  }
+  u.coins+=20000;
+  u.lastClaim=today();
+  saveDB();
+  refresh();
+}
+
+function refresh(){
+  const u=user();
+  if(!u)return;
+
+  $("coins").textContent=u.coins;
+  $("recordCount").textContent=Object.keys(u.records).length;
+  $("historyCount").textContent=u.history.length;
+
+  const select=$("recordSelect");
+  const previous=select.value;
+  select.innerHTML="";
+  const create=document.createElement("option");
+  create.value="";
+  create.textContent="Create NEW QR — 100 coins";
+  select.appendChild(create);
+
+  Object.values(u.records).forEach(r=>{
+    const option=document.createElement("option");
+    option.value=r.id;
+    option.textContent=r.id.slice(0,12)+"… — reuse (80 coins)";
+    select.appendChild(option);
+  });
+
+  if(previous&&u.records[previous])select.value=previous;
+  renderRecords();
+}
+
+async function encryptMessageData(message,passphrase){
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+
+  const material=await crypto.subtle.importKey(
+    "raw",new TextEncoder().encode(passphrase),
+    "PBKDF2",false,["deriveKey"]
+  );
+
+  const key=await crypto.subtle.deriveKey({
+    name:"PBKDF2",salt,iterations:180000,hash:"SHA-256"
+  },material,{name:"AES-GCM",length:256},false,["encrypt"]);
+
+  const encrypted=await crypto.subtle.encrypt(
+    {name:"AES-GCM",iv},
+    key,
+    new TextEncoder().encode(message)
+  );
+
+  return {
+    salt:toB64(salt),
+    iv:toB64(iv),
+    ciphertext:toB64(new Uint8Array(encrypted))
+  };
+}
+
+async function decryptMessageData(data,passphrase){
+  const material=await crypto.subtle.importKey(
+    "raw",new TextEncoder().encode(passphrase),
+    "PBKDF2",false,["deriveKey"]
+  );
+
+  const key=await crypto.subtle.deriveKey({
+    name:"PBKDF2",
+    salt:fromB64(data.salt),
+    iterations:180000,
+    hash:"SHA-256"
+  },material,{name:"AES-GCM",length:256},false,["decrypt"]);
+
+  const plain=await crypto.subtle.decrypt(
+    {name:"AES-GCM",iv:fromB64(data.iv)},
+    key,
+    fromB64(data.ciphertext)
+  );
+
+  return new TextDecoder().decode(plain);
+}
+
+async function generateQR(){
+  try{
+    const u=user();
+    if(!u)throw Error("Please log in first.");
+    if(!crypto.subtle)throw Error("Web Crypto unavailable. Open in a supported browser context.");
+    if(typeof QRCode==="undefined")throw Error("QR library did not load. Connect to the internet and reload.");
+    const message=$("message").value;
+    const pass=$("passphrase").value;
+    if(!message.trim())throw Error("Write a message first.");
+    if(pass.length<8)throw Error("Use a passphrase of at least 8 characters.");
+
+    const existingId=$("recordSelect").value;
+    const cost=existingId?80:100;
+    if(u.coins<cost)throw Error("Not enough coins. Claim your daily coins first.");
+
+    let record;
+    if(existingId){
+      record=u.records[existingId];
+      if(!record)throw Error("Selected QR record was not found.");
+    }else{
+      record={
+        id:randomId(),
+        createdAt:Date.now(),
+        messages:[]
+      };
+    }
+
+    const encrypted=await encryptMessageData(message,pass);
+    const timerSeconds=Number($("timer").value);
+    const entry={
+      version:1,
+      recordId:record.id,
+      messageId:randomId(),
+      createdAt:Date.now(),
+      expiresAt:timerSeconds?Date.now()+timerSeconds*1000:0,
+      readOnce:$("readOnce").value==="yes",
+      encrypted
+    };
+
+    const payload=JSON.stringify(entry);
+    if(payload.length>2500)throw Error("Payload is too large for this QR generator. Shorten the message.");
+
+    u.coins-=cost;
+    record.messages.push(entry);
+    record.latestMessageId=entry.messageId;
+    u.records[record.id]=record;
+    u.history.unshift({
+      recordId:record.id,
+      messageId:entry.messageId,
+      createdAt:entry.createdAt,
+      expiresAt:entry.expiresAt,
+      readOnce:entry.readOnce
+    });
+    u.history=u.history.slice(0,500);
+    saveDB();
+
+    $("payload").value=payload;
+    $("incoming").value=payload;
+    $("decrypted").value="";
+    $("decryptPass").value="";
+    $("qr").innerHTML="";
+    currentQr=new QRCode($("qr"),{
+      text:payload,
+      width:250,
+      height:250,
+      correctLevel:QRCode.CorrectLevel.L
+    });
+
+    status("generateStatus",
+      "QR generated successfully. Cost: "+cost+" coins.\nRecord ID: "+record.id,
+      true
+    );
+    refresh();
+  }catch(e){
+    status("generateStatus",e.message);
+  }
+}
+
+function clearForm(){
+  $("message").value="";
+  $("passphrase").value="";
+  $("payload").value="";
+  $("qr").innerHTML="";
+  currentQr=null;
+  status("generateStatus","Form cleared.",true);
+}
+
+function getQrCanvasOrImage(){
+  return $("qr").querySelector("canvas") || $("qr").querySelector("img");
+}
+
+function downloadQR(){
+  const el=getQrCanvasOrImage();
+  if(!el){alert("Generate a QR first.");return;}
+  const link=document.createElement("a");
+  link.download="secure-qr.png";
+  link.href=el.tagName==="CANVAS"?el.toDataURL("image/png"):el.src;
+  link.click();
+}
+
+async function copyPayload(){
+  const p=$("payload").value;
+  if(!p){alert("Generate a QR first.");return;}
+  try{
+    await navigator.clipboard.writeText(p);
+    status("generateStatus","Encrypted payload copied.",true);
+  }catch(e){
+    $("payload").focus();
+    $("payload").select();
+    alert("Clipboard permission unavailable. The payload is selected; copy it manually.");
+  }
+}
+
+async function sharePayload(){
+  const p=$("payload").value;
+  if(!p){alert("Generate a QR first.");return;}
+  try{
+    if(navigator.share){
+      await navigator.share({title:"Secure QR Vault",text:p});
+    }else{
+      await navigator.clipboard.writeText(p);
+      alert("Payload copied. You can paste it into your messaging app.");
+    }
+  }catch(e){
+    if(e.name!=="AbortError")alert("Sharing unavailable. Copy the payload instead.");
+  }
+}
+
+async function decryptMessage(){
+  try{
+    const u=user();
+    if(!u)throw Error("Please log in first.");
+    if(!crypto.subtle)throw Error("Web Crypto unavailable.");
+
+    const raw=$("incoming").value.trim();
+    const pass=$("decryptPass").value;
+    if(!raw)throw Error("Paste an encrypted payload first.");
+    if(!pass)throw Error("Enter the passphrase.");
+
+    let data;
+    try{data=JSON.parse(raw);}
+    catch(e){throw Error("Invalid payload. Paste the complete JSON payload.");}
+
+    if(!data.recordId||!data.messageId||!data.encrypted) {
+      throw Error("This is not a supported Secure QR Vault payload.");
+    }
+
+    const now=Date.now();
+    if(data.expiresAt&&now>=data.expiresAt){
+      markExpiredLocally(data);
+      $("decrypted").value="";
+      throw Error("This message has expired. Decryption blocked.");
+    }
+
+    const readKey=data.recordId+":"+data.messageId;
+    if(data.readOnce&&u.readMessages[readKey]){
+      $("decrypted").value="";
+      throw Error("Read Once: this message was already opened in this browser account.");
+    }
+
+    const plain=await decryptMessageData(data.encrypted,pass);
+
+    $("decrypted").value=plain;
+    status("decryptStatus","Decryption successful.",true);
+
+    if(data.readOnce){
+      u.readMessages[readKey]=Date.now();
+      saveDB();
+      status("decryptStatus",
+        "Read Once: opened successfully. Future attempts in this local account will be blocked.",
+        true
+      );
+    }
+
+    if(!u.history.some(h=>h.recordId===data.recordId&&h.messageId===data.messageId)){
+      u.history.unshift({
+        recordId:data.recordId,
+        messageId:data.messageId,
+        createdAt:data.createdAt||now,
+        expiresAt:data.expiresAt||0,
+        readOnce:!!data.readOnce
+      });
+      u.history=u.history.slice(0,500);
+      saveDB();
+      refresh();
+    }
+  }catch(e){
+    status("decryptStatus",e.message);
+  }
+}
+
+function markExpiredLocally(data){
+  const u=user();
+  if(!u)return;
+  const record=u.records[data.recordId];
+  if(record){
+    record.messages=record.messages.filter(m=>m.messageId!==data.messageId);
+  }
+  u.history=u.history.filter(h=>h.messageId!==data.messageId);
+  saveDB();
+  refresh();
+}
+
+function cleanup(showMessage=true){
+  const u=user();
+  if(!u)return;
+  const now=Date.now();
+  let removed=0;
+
+  for(const record of Object.values(u.records)){
+    const before=record.messages.length;
+    record.messages=record.messages.filter(m=>!m.expiresAt||now<m.expiresAt);
+    removed+=before-record.messages.length;
+  }
+
+  u.history=u.history.filter(h=>!h.expiresAt||now<h.expiresAt);
+
+  for(const record of Object.values(u.records)){
+    if(record.messages.length===0){
+      delete u.records[record.id];
+    }else if(!record.messages.some(m=>m.messageId===record.latestMessageId)){
+      record.latestMessageId=record.messages[record.messages.length-1].messageId;
+    }
+  }
+
+  saveDB();
+  if($("appPanel")&&!$("appPanel").classList.contains("hidden"))refresh();
+  if(showMessage)alert("Expired local records cleaned: "+removed);
+}
+
+function renderRecords(){
+  const u=user();
+  if(!u)return;
+  const box=$("recordsList");
+  box.innerHTML="";
+  const records=Object.values(u.records);
+
+  if(records.length===0){
+    box.textContent="No local records yet.";
+    return;
+  }
+
+  records.forEach(record=>{
+    const div=document.createElement("div");
+    div.className="item";
+
+    const title=document.createElement("b");
+    title.textContent="Record: "+record.id;
+
+    const p=document.createElement("p");
+    p.className="note";
+    p.textContent="Message versions: "+record.messages.length;
+
+    const latest=record.messages.find(m=>m.messageId===record.latestMessageId);
+    const info=document.createElement("p");
+    info.className="note";
+    info.textContent=latest
+      ?"Latest created: "+new Date(latest.createdAt).toLocaleString()
+      :"No active messages.";
+
+    const use=document.createElement("button");
+    use.textContent="Select for Reuse";
+    use.onclick=()=>{
+      $("recordSelect").value=record.id;
+      recordChanged();
+      window.scrollTo({top:0,behavior:"smooth"});
+    };
+
+    const del=document.createElement("button");
+    del.className="red";
+    del.textContent="Delete Local Record";
+    del.onclick=()=>{
+      if(confirm("Delete this local record and its stored versions?")){
+        delete u.records[record.id];
+        u.history=u.history.filter(h=>h.recordId!==record.id);
+        saveDB();
+        refresh();
+      }
+    };
+
+    div.append(title,p,info,use,del);
+    box.appendChild(div);
+  });
+}
+
+function clearDecrypted(){
+  $("decrypted").value="";
+  $("decryptPass").value="";
+  status("decryptStatus","Decrypted text cleared locally.",true);
+}
+
+function exportBackup(){
+  const u=user();
+  if(!u)return;
+  const blob=new Blob([JSON.stringify({
+    format:"SecureQRVaultBackup",
+    version:1,
+    username:activeUser,
+    data:u
+  },null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="secure-qr-vault-backup.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function restoreBackup(){
+  const file=$("backupFile").files[0];
+  if(!file){alert("Choose a JSON backup file first.");return;}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const backup=JSON.parse(reader.result);
+      if(backup.format!=="SecureQRVaultBackup"||!backup.data||!backup.data.records){
+        throw Error("Invalid backup file.");
+      }
+      if(!confirm("Replace the current local vault data with this backup?"))return;
+      db.users[activeUser]=backup.data;
+      saveDB();
+      cleanup(false);
+      refresh();
+      alert("Backup restored.");}catch(e){
+      alert("Restore failed: "+e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+$("recordSelect").addEventListener("change",()=>{
+  const id=$("recordSelect").value;
+  if(id){
+    $("generateStatus").textContent=
+      "Existing record selected. A new encrypted message will be added to this record.";
+  }else{
+    $("generateStatus").textContent="New record selected.";
+  }
+});
+
+setInterval(()=>{
+  if(activeUser&&$("appPanel")&&!$("appPanel").classList.contains("hidden")){
+    cleanup(false);
+  }
+},5000);
+
+window.addEventListener("pageshow",()=>{
+  if(activeUser)cleanup(false);
+});
+
+if(!crypto.subtle){
+  status("loginStatus",
+    "Secure Web Crypto unavailable. Open in a supported browser context, preferably HTTPS or localhost."
+  );
+}
+</script>
+</body>
+</html>
