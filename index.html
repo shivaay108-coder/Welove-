@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure QR Vault</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  color-scheme:dark;--bg:#07111f;--panel:#101f32;
+  --border:#29415d;--cyan:#35e0ff;--green:#47e6a1;
+  --red:#ff7185;--text:#eaf5ff;--muted:#9eb4cb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:12px;background:radial-gradient(circle at top,#183452,var(--bg) 65%);
+  color:var(--text);font-family:Arial,sans-serif;
+}
+main{max-width:900px;margin:auto}
+h1{text-align:center;color:var(--cyan);font-size:27px}
+h2{font-size:19px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:15px;margin:13px 0}
+label{display:block;margin:12px 0 6px;color:#cce4ff}
+input,textarea,select{
+  width:100%;padding:12px;border-radius:9px;border:1px solid var(--border);
+  background:#071522;color:white;font-size:15px;
+}
+textarea{min-height:85px;resize:vertical}
+input[type=color]{height:45px;padding:4px}
+button{
+  padding:12px;border:0;border-radius:9px;margin:5px 3px;
+  background:var(--cyan);color:#06111b;font-weight:bold;cursor:pointer;
+}
+button:active{transform:scale(.98)}
+.secondary{background:#304760;color:white}
+.green{background:var(--green)}
+.red{background:var(--red)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1;min-width:120px}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.stat{flex:1;min-width:100px;padding:12px;background:#071522;border-radius:9px}
+.stat small{display:block;color:var(--muted)}
+.stat strong{display:block;font-size:21px;margin-top:6px}
+.note{color:var(--muted);font-size:13px;line-height:1.6}
+.status{background:#071522;padding:10px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:10px}
+#qr{display:flex;justify-content:center;margin:18px auto;background:white;width:max-content;max-width:100%;padding:5px}
+#qr img,#qr canvas{max-width:100%;height:auto}
+.item{padding:12px;border:1px solid var(--border);border-radius:10px;margin:8px 0;overflow-wrap:anywhere}
+.hidden{display:none!important}
+.good{color:var(--green)}
+.bad{color:var(--red)}
+.tabs{display:flex;gap:8px;margin:12px 0}
+.tabs button{flex:1;margin:0;padding:14px 5px}
+.tabs button.active{background:var(--green);outline:2px solid #47e6a155}
+.small{font-size:12px}
+.emoji-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.emoji-grid button{font-size:23px;min-width:44px;padding:7px;margin:0;background:#203851;color:white}
+.emoji-grid button.selected{outline:2px solid var(--cyan)}
+.gift-preview{
+  min-height:270px;padding:22px;border-radius:18px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  overflow-wrap:anywhere;position:relative;overflow:hidden;
+  border:2px solid #ffffff55;box-shadow:0 0 28px #35e0ff22;
+}
+.gift-preview h2{font-size:27px;margin:12px 0}
+.gift-preview .big-emoji{font-size:60px;line-height:1.3}
+.gift-preview .decor{font-size:30px;line-height:1.8;word-break:break-word}
+.gift-preview .gift-message{white-space:pre-wrap;font-size:19px;line-height:1.5}
+.gift-preview .from{font-size:13px;margin-top:15px;opacity:.85}
+.gift-card{padding:12px;border:1px solid var(--border);border-radius:12px;margin:10px 0}
+.gift-card .gift-preview{min-height:180px}
+.gift-card .gift-preview .big-emoji{font-size:38px}
+.gift-card .gift-preview h2{font-size:21px}
+.gift-card .gift-preview .decor{font-size:22px}
+.gift-card .gift-preview .gift-message{font-size:15px}
+#giftReveal{margin:15px 0;animation:reveal .6s ease}
+@keyframes reveal{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+.footer{color:var(--muted);font-size:12px;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<main>
+<h1>🔐 Secure QR Vault</h1>
+<p class="note" style="text-align:center">Encrypted Messages • Digital Gifts • QR Vault</p>
+
+<section class="panel" id="loginPanel">
+<h2>👤 Local Account</h2>
+<label>Username</label>
+<input id="username" maxlength="40" autocomplete="username" placeholder="Username">
+<label>Password</label>
+<input id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters">
+<button onclick="register()">Create Account</button>
+<button class="secondary" onclick="login()">Login</button>
+<div id="loginStatus" class="status">Create an account or log in.</div>
+</section>
+
+<section class="panel hidden" id="appPanel">
+<div class="row">
+<div>
+<h2>My Vault</h2>
+<span class="note">User: <b id="currentUser"></b></span>
+</div>
+<button class="secondary" onclick="logout()">Logout</button>
+</div>
+
+<div class="stats">
+<div class="stat"><small>Coins</small><strong id="coins">0</strong></div>
+<div class="stat"><small>QR Records</small><strong id="recordCount">0</strong></div>
+<div class="stat"><small>History</small><strong id="historyCount">0</strong></div>
+<div class="stat"><small>My Gifts</small><strong id="giftCount">0</strong></div>
+</div>
+<button class="green" onclick="claimDaily()">🎁 Claim Daily 20,000 Coins</button>
+
+<div class="tabs">
+<button id="messageTabBtn" class="active" onclick="showTab('message')">💬 Message</button>
+<button id="giftTabBtn" onclick="showTab('gift')">🎁 Gift Studio</button>
+<button id="collectionTabBtn" onclick="showTab('collection')">💝 My Collection</button>
+</div>
+
+<!-- MESSAGE TAB -->
+<div id="messageTab">
+<h2>1. Create / Reuse QR Message</h2>
+<label>QR Record</label>
+<select id="recordSelect">
+<option value="">Create NEW QR — 100 coins</option>
+</select>
+<p class="note">New QR: 100 coins. Reuse existing record: 80 coins. Reuse keeps the record ID, but a new QR image is generated for the new encrypted message.</p>
+
+<label>Message</label>
+<textarea id="message" maxlength="1000" placeholder="Write your message"></textarea>
+<label>Encryption Passphrase</label>
+<input id="passphrase" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+
+<div class="row">
+<div>
+<label>Auto-delete Timer</label>
+<select id="timer">
+<option value="60">1 minute</option>
+<option value="300">5 minutes</option>
+<option value="900">15 minutes</option>
+<option value="3600">1 hour</option>
+<option value="86400">24 hours</option>
+<option value="0">No timer</option>
+</select>
+</div>
+<div>
+<label>Read Once</label>
+<select id="readOnce">
+<option value="yes">Enabled</option>
+<option value="no">Disabled</option>
+</select>
+</div>
+</div>
+<button onclick="generateQR()">🔐 Encrypt & Generate QR</button>
+<button class="secondary" onclick="clearMessageForm()">Clear Form</button>
+<div id="generateStatus" class="status">Ready.</div>
+
+<div id="qr"></div>
+<div class="row">
+<button class="green" onclick="downloadQR()">Download QR</button>
+<button class="secondary" onclick="copyPayload()">Copy Payload</button>
+<button class="secondary" onclick="sharePayload()">Share Payload</button>
+</div>
+<label>Encrypted Payload</label>
+<textarea id="payload" placeholder="Encrypted data appears here"></textarea>
+
+<hr style="border-color:var(--border);margin:22px 0">
+<h2>2. Decrypt Message or Gift</h2>
+<p class="note">Paste a QR payload here. If it is a gift, it will be opened in the gift viewer and saved to your collection after the reveal.</p>
+<label>Encrypted Payload</label>
+<textarea id="incoming" placeholder="Paste the complete encrypted JSON payload"></textarea>
+<label>Passphrase / Gift Key</label>
+<input id="decryptPass" type="password" autocomplete="off" placeholder="Enter the correct passphrase or key">
+<button class="green" onclick="decryptPayload()">🔓 Decrypt / Open</button>
+<div id="decryptStatus" class="status">Waiting for payload.</div>
+<label>Decrypted Message</label>
+<textarea id="decrypted" readonly placeholder="Decrypted message appears here"></textarea>
+<button class="red" onclick="clearDecrypted()">Clear Decrypted Content</button>
+
+<h2>3. Local QR Records</h2>
+<div id="recordsList"></div>
+<button class="red" onclick="cleanup()">Run Expiry Cleanup</button>
+
+<h2>4. Backup</h2>
+<button onclick="exportBackup()">Export Backup</button>
+<label>Restore JSON Backup</label>
+<input id="backupFile" type="file" accept=".json,application/json">
+<button class="secondary" onclick="restoreBackup()">Restore Backup</button>
+</div>
+
+<!-- GIFT STUDIO TAB -->
+<div id="giftTab" class="hidden">
+<h2>🎁 Gift Studio</h2>
+<p class="note">Create a colorful digital gift, add emojis and decorations, set a Gift Key, and send its encrypted QR payload. Creating each gift costs 1,000 coins.</p>
+<div class="stats">
+<div class="stat"><small>Gift Creation Price</small><strong>1,000</strong><small>Coins per gift</small></div>
+<div class="stat"><small>Collection</small><strong id="studioGiftCount">0</strong><small>Received/opened gifts</small></div>
+</div>
+
+<label>Gift Theme</label>
+<select id="giftTheme" onchange="applyTheme()">
+<option value="birthday">🎂 Happy Birthday</option>
+<option value="friendship">🤝 Friendship</option>
+<option value="love">💖 Hearts & Love</option>
+<option value="hello">👋 Hello / Hi</option>
+<option value="congrats">🏆 Congratulations</option>
+<option value="thanks">🙏 Thank You</option>
+<option value="sad">🥺 Cheer Up</option>
+<option value="custom">✨ Custom Gift</option>
+</select>
+
+<label>Gift Title</label>
+<input id="giftTitle" maxlength="70" value="Happy Birthday!">
+
+<label>Your Gift Message</label>
+<textarea id="giftMessage" maxlength="500" placeholder="Write your personal gift message..."></textarea>
+
+<div class="row">
+<div>
+<label>Background Colour</label>
+<input id="giftBg" type="color" value="#7028a0" oninput="previewGift()">
+</div>
+<div>
+<label>Writing Colour</label>
+<input id="giftTextColor" type="color" value="#ffffff" oninput="previewGift()">
+</div>
+</div>
+<div class="row">
+<div>
+<label>Writing Style</label>
+<select id="giftFont" onchange="previewGift()">
+<option value="Arial,sans-serif">Modern</option>
+<option value="Georgia,serif">Elegant</option>
+<option value="cursive">Handwriting style</option>
+<option value="monospace">Digital</option>
+</select>
+</div>
+<div>
+<label>Text Size</label>
+<select id="giftFontSize" onchange="previewGift()">
+<option value="16">Small</option>
+<option value="19" selected>Medium</option>
+<option value="24">Large</option>
+<option value="30">Extra Large</option>
+</select>
+</div>
+</div>
+
+<label>Gift Box / Main Emoji</label>
+<div class="emoji-grid" id="mainEmojiGrid"></div>
+<input id="giftMainEmoji" type="hidden" value="🎁">
+
+<label>Decorations — choose any number</label>
+<div class="emoji-grid" id="decorEmojiGrid"></div>
+<p class="note">Tap emojis to add or remove them from the decoration. You can also type your own emojis below.</p>
+<label>Extra Decorations</label>
+<input id="giftExtraDecor" maxlength="100" placeholder="🌹 🌸 💖 ✨ 🎉">
+<label>Gift From (optional)</label>
+<input id="giftFrom" maxlength="50" placeholder="Your name or nickname">
+
+<h2>Live Gift Preview</h2>
+<div id="giftPreview" class="gift-preview">
+<div class="decor" id="previewTopDecor">🌹 💖 ✨</div>
+<div class="big-emoji" id="previewMain">🎁</div>
+<h2 id="previewTitle">Happy Birthday!</h2>
+<div class="gift-message" id="previewMessage">Your gift message will appear here.</div>
+<div class="decor" id="previewBottomDecor">🌸 🎉 💝</div>
+<div class="from" id="previewFrom"></div>
+</div>
+
+<label>Gift Key / Password</label>
+<input id="giftKey" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+<label>Confirm Gift Key</label>
+<input id="giftKeyConfirm" type="password" placeholder="Enter the same key again">
+<button class="green" onclick="createGift()">🔐 Encrypt Gift — 1,000 Coins</button>
+<button class="secondary" onclick="resetGiftForm()">Reset Gift Design</button>
+<div id="giftStatus" class="status">Design your gift above.</div>
+<div id="giftQr"></div>
+<div class="row">
+<button class="green" onclick="downloadGiftQR()">Download Gift QR</button>
+<button class="secondary" onclick="copyGiftPayload()">Copy Gift Payload</button>
+<button class="secondary" onclick="shareGiftPayload()">Share Gift</button>
+</div>
+<label>Encrypted Gift Payload</label>
+<textarea id="giftPayload" placeholder="Your encrypted gift payload appears here" readonly></textarea>
+<p class="note">The creator does not automatically receive this gift in their collection. Share the QR image or encrypted payload with the recipient. The recipient must open it in their own Secure QR Vault and enter the correct Gift Key.</p>
+</div>
+
+<!-- GIFT COLLECTION TAB -->
+<div id="collectionTab" class="hidden">
+<h2>💝 My Gift Collection</h2>
+<p class="note">Only gifts opened successfully on this local account are saved here. Date and time are stored with each gift.</p>
+<div id="giftCollectionList"></div>
+<button class="secondary" onclick="exportGiftCollection()">Export Gift Collection</button>
+<button class="red" onclick="clearGiftCollection()">Clear My Collection</button>
+</div>
+
+<div class="footer">
+Secure QR Vault • Local browser storage<br>
+Keep backup copies of important data. This prototype is not a server-backed messaging service.
+</div>
+</section>
+</main>
+
+<script>
+"use strict";
+
+const DB_KEY="secure_qr_vault_data_v2";
+let db=loadDB();
+let activeUser=null;
+let currentQr=null;
+let currentGiftQr=null;
+let selectedDecor=new Set(["🌹","💖","✨","🌸","🎉","💝"]);
+let selectedMain="🎁";
+let revealTimer=null;
+
+function loadDB(){
+  try{return JSON.parse(localStorage.getItem(DB_KEY))||{users:{}}}
+  catch(e){return {users:{}}}
+}
+function saveDB(){
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db))}
+  catch(e){alert("Storage error: browser storage may be full. Export a backup and remove some data.")}
+}
+function $(id){return document.getElementById(id)}
+function status(id,msg,ok=false){
+  $(id).textContent=msg;
+  $(id).className="status "+(ok?"good":"bad");
+}
+function user(){return activeUser?db.users[activeUser]:null}
+function today(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function randomId(bytes=16){
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)),b=>b.toString(16).padStart(2,"0")).join("");
+}
+function toB64(arr){
+  let s="";
+  for(const b of arr)s+=String.fromCharCode(b);
+  return btoa(s);
+}
+function fromB64(s){
+  const bin=atob(s),out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);
+  return out;
+}
+async function passwordHash(password,salt){
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);
+  const bits=await crypto.subtle.deriveBits({
+    name:"PBKDF2",salt:fromB64(salt),iterations:180000,hash:"SHA-256"
+  },key,256);
+  return toB64(new Uint8Array(bits));
+}
+function newUser(salt,hash){
+  return {
+    salt,hash,coins:0,lastClaim:"",records:{},history:[],
+    readMessages:{},giftCollection:[]
+  };
+}
+function ensureUserFields(u){
+  if(!u.records)u.records={};
+  if(!u.history)u.history=[];
+  if(!u.readMessages)u.readMessages={};
+  if(!Array.isArray(u.giftCollection))u.giftCollection=[];
+  if(typeof u.coins!=="number")u.coins=0;
+}
+async function register(){
+  try{
+    if(!crypto.subtle)throw Error("Web Crypto unavailable. Open in a supported browser context.");
+    const name=$("username").value.trim().toLowerCase(),pass=$("password").value;
+    if(!name||pass.length<6)throw Error("Enter a username and a password of at least 6 characters.");
+    if(db.users[name])throw Error("Account already exists. Please log in.");
+    const salt=toB64(crypto.getRandomValues(new Uint8Array(16)));
+    const hash=await passwordHash(pass,salt);
+    db.users[name]=newUser(salt,hash);
+    activeUser=name;saveDB();showApp();
+  }catch(e){status("loginStatus",e.message)}
+}
+async function login(){
+  try{
+    if(!crypto.subtle)throw Error("Web Crypto unavailable. Use a supported browser context.");
+    const name=$("username").value.trim().toLowerCase(),pass=$("password").value,u=db.users[name];
+    if(!u)throw Error("Account not found on this device.");
+    if(await passwordHash(pass,u.salt)!==u.hash)throw Error("Incorrect password.");
+    activeUser=name;ensureUserFields(u);saveDB();showApp();
+  }catch(e){status("loginStatus",e.message)}
+}
+function logout(){
+  activeUser=null;
+  $("appPanel").classList.add("hidden");
+  $("loginPanel").classList.remove("hidden");
+  $("password").value="";
+}
+function showApp(){
+  $("loginPanel").classList.add("hidden");
+  $("appPanel").classList.remove("hidden");
+  $("currentUser").textContent=activeUser;
+  cleanup(false);refresh();renderGiftCollection();
+}
+function claimDaily(){
+  const u=user();if(!u)return;
+  if(u.lastClaim===today()){alert("Daily coins already claimed today.");return}
+  u.coins+=20000;u.lastClaim=today();saveDB();refresh();
+}
+function refresh(){
+  const u=user();if(!u)return;ensureUserFields(u);
+  $("coins").textContent=u.coins;
+  $("recordCount").textContent=Object.keys(u.records).length;
+  $("historyCount").textContent=u.history.length;
+  $("giftCount").textContent=u.giftCollection.length;
+  $("studioGiftCount").textContent=u.giftCollection.length;
+
+  const select=$("recordSelect"),previous=select.value;
+  select.innerHTML="";
+  const create=document.createElement("option");
+  create.value="";create.textContent="Create NEW QR — 100 coins";select.appendChild(create);
+  Object.values(u.records).forEach(r=>{
+    const option=document.createElement("option");
+    option.value=r.id;option.textContent=r.id.slice(0,12)+"… — reuse (80 coins)";
+    select.appendChild(option);
+  });
+  if(previous&&u.records[previous])select.value=previous;
+  renderRecords();
+}
+async function encryptMessageData(message,passphrase){
+  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+  const material=await crypto.subtle.importKey("raw",new TextEncoder().encode(passphrase),"PBKDF2",false,["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({
+    name:"PBKDF2",salt,iterations:180000,hash:"SHA-256"
+  },material,{name:"AES-GCM",length:256},false,["encrypt"]);
+  const encrypted=await crypto.subtle.encrypt(
+    {name:"AES-GCM",iv},key,new TextEncoder().encode(message)
+  );
+  return {salt:toB64(salt),iv:toB64(iv),ciphertext:toB64(new Uint8Array(encrypted))};
+}
+async function decryptMessageData(data,passphrase){
+  const material=await crypto.subtle.importKey("raw",new TextEncoder().encode(passphrase),"PBKDF2",false,["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({
+    name:"PBKDF2",salt:fromB64(data.salt),iterations:180000,hash:"SHA-256"
+  },material,{name:"AES-GCM",length:256},false,["decrypt"]);
+  const plain=await crypto.subtle.decrypt(
+    {name:"AES-GCM",iv:fromB64(data.iv)},key,fromB64(data.ciphertext)
+  );
+  return new TextDecoder().decode(plain);
+}
+function showTab(name){
+  ["message","gift","collection"].forEach(t=>{
+    $(t+"Tab").classList.toggle("hidden",t!==name);
+    const b=$(t+"TabBtn");if(b)b.classList.toggle("active",t===name);
+  });
+}
+function renderQR(targetId,payload){
+  if(typeof QRCode==="undefined")throw Error("QR library did not load. Connect to the internet and reload.");
+  $(targetId).innerHTML="";
+  return new QRCode($(targetId),{
+    text:payload,width:250,height:250,correctLevel:QRCode.CorrectLevel.L
+  });
+}
+async function generateQR(){
+  try{
+    const u=user();if(!u)throw Error("Please log in first.");
+    if(!crypto.subtle)throw Error("Web Crypto unavailable.");
+    const message=$("message").value,pass=$("passphrase").value;
+    if(!message.trim())throw Error("Write a message first.");
+    if(pass.length<8)throw Error("Use a passphrase of at least 8 characters.");
+    const existingId=$("recordSelect").value,cost=existingId?80:100;
+    if(u.coins<cost)throw Error("Not enough coins. Claim daily coins first.");
+    let record;
+    if(existingId){
+      record=u.records[existingId];
+      if(!record)throw Error("Selected record not found.");
+    }else record={id:randomId(),createdAt:Date.now(),messages:[]};
+
+    const encrypted=await encryptMessageData(message,pass),timerSeconds=Number($("timer").value);
+    const entry={
+      version:1,type:"message",recordId:record.id,messageId:randomId(),
+      createdAt:Date.now(),expiresAt:timerSeconds?Date.now()+timerSeconds*1000:0,
+      readOnce:$("readOnce").value==="yes",encrypted
+    };
+    const payload=JSON.stringify(entry);
+    if(payload.length>2500)throw Error("Payload too large for this QR. Shorten the message.");
+    u.coins-=cost;record.messages.push(entry);record.latestMessageId=entry.messageId;
+    u.records[record.id]=record;
+    u.history.unshift({recordId:record.id,messageId:entry.messageId,createdAt:entry.createdAt,expiresAt:entry.expiresAt,readOnce:entry.readOnce});
+    u.history=u.history.slice(0,500);saveDB();
+    $("payload").value=payload;$("incoming").value=payload;$("decrypted").value="";
+    currentQr=renderQR("qr",payload);
+    status("generateStatus","QR generated. Cost: "+cost+" coins.\nRecord ID: "+record.id,true);
+    refresh();
+  }catch(e){status("generateStatus",e.message)}
+}
+function clearMessageForm(){
+  $("message").value="";$("passphrase").value="";$("payload").value="";$("qr").innerHTML="";
+  currentQr=null;status("generateStatus","Form cleared.",true);
+}
+function getCanvas(targetId){return $(targetId).querySelector("canvas")||$(targetId).querySelector("img")}
+function downloadElementQR(targetId,filename){
+  const el=getCanvas(targetId);if(!el){alert("Generate a QR first.");return}
+  const a=document.createElement("a");a.download=filename;
+  a.href=el.tagName==="CANVAS"?el.toDataURL("image/png"):el.src;a.click();
+}
+function downloadQR(){downloadElementQR("qr","secure-qr.png")}
+function downloadGiftQR(){downloadElementQR("giftQr","secure-gift-qr.png")}
+async function copyText(text,areaId,statusId,success){
+  if(!text){alert("Nothing to copy yet.");return}
+  try{
+    await navigator.clipboard.writeText(text);
+    if(statusId)status(statusId,success,true);
+  }catch(e){
+    const el=$(areaId);el.focus();el.select();
+    alert("Clipboard permission unavailable. Text is selected; copy it manually.");
+  }
+}
+function copyPayload(){copyText($("payload").value,"payload","generateStatus","Encrypted payload copied.")}
+function copyGiftPayload(){copyText($("giftPayload").value,"giftPayload","giftStatus","Gift payload copied.")}
+async function shareTextPayload(text,title){
+  if(!text){alert("Generate the payload first.");return}
+  try{
+    if(navigator.share)await navigator.share({title,text});
+    else{await navigator.clipboard.writeText(text);alert("Payload copied. Paste it into your messaging app.")}
+  }catch(e){if(e.name!=="AbortError")alert("Sharing unavailable. Copy the payload instead.")}
+}
+function sharePayload(){shareTextPayload($("payload").value,"Secure QR Vault Message")}
+function shareGiftPayload(){shareTextPayload($("giftPayload").value,"Secure QR Vault Gift")}
+
+async function decryptPayload(){
+  try{
+    const u=user();if(!u)throw Error("Please log in first.");
+    if(!crypto.subtle)throw Error("Web Crypto unavailable.");
+    const raw=$("incoming").value.trim(),pass=$("decryptPass").value;
+    if(!raw)throw Error("Paste an encrypted payload first.");
+    if(!pass)throw Error("Enter the passphrase or Gift Key.");
+    let data;try{data=JSON.parse(raw)}catch(e){throw Error("Invalid payload. Paste the complete JSON payload.")}
+    if(data.type==="gift"){
+      await openGift(data,pass);return;
+    }
+    if(!data.recordId||!data.messageId||!data.encrypted)throw Error("Unsupported Secure QR Vault payload.");
+    const now=Date.now();
+    if(data.expiresAt&&now>=data.expiresAt){markExpiredLocally(data);$("decrypted").value="";throw Error("This message has expired. Decryption blocked.")}
+    const readKey=data.recordId+":"+data.messageId;
+    if(data.readOnce&&u.readMessages[readKey]){$("decrypted").value="";throw Error("Read Once: this message was already opened in this local account.")}
+    const plain=await decryptMessageData(data.encrypted,pass);
+    $("decrypted").value=plain;
+    status("decryptStatus","Decryption successful.",true);
+    if(data.readOnce){
+      u.readMessages[readKey]=Date.now();saveDB();
+      status("decryptStatus","Read Once: opened. Future attempts in this local account will be blocked.",true);
+    }
+    if(!u.history.some(h=>h.recordId===data.recordId&&h.messageId===data.messageId)){
+      u.history.unshift({recordId:data.recordId,messageId:data.messageId,createdAt:data.createdAt||now,expiresAt:data.expiresAt||0,readOnce:!!data.readOnce});
+      u.history=u.history.slice(0,500);saveDB();refresh();
+    }
+  }catch(e){status("decryptStatus",e.message)}
+}
+function markExpiredLocally(data){
+  const u=user();if(!u)return;
+  const r=u.records[data.recordId];
+  if(r)r.messages=r.messages.filter(m=>m.messageId!==data.messageId);
+  u.history=u.history.filter(h=>h.messageId!==data.messageId);saveDB();refresh();
+}
+function cleanup(showMessage=true){
+  const u=user();if(!u)return;
+  const now=Date.now();let removed=0;
+  for(const r of Object.values(u.records)){
+    const before=r.messages.length;
+    r.messages=r.messages.filter(m=>!m.expiresAt||now<m.expiresAt);removed+=before-r.messages.length;
+  }
+  u.history=u.history.filter(h=>!h.expiresAt||now<h.expiresAt);
+  for(const r of Object.values(u.records)){
+    if(r.messages.length===0)delete u.records[r.id];
+    else if(!r.messages.some(m=>m.messageId===r.latestMessageId))r.latestMessageId=r.messages[r.messages.length-1].messageId;
+  }
+  saveDB();
+  if($("appPanel")&&!$("appPanel").classList.contains("hidden"))refresh();
+  if(showMessage)alert("Expired local records cleaned: "+removed);
+}
+function renderRecords(){
+  const u=user();if(!u)return;
+  const box=$("recordsList");box.innerHTML="";
+  const records=Object.values(u.records);
+  if(!records.length){box.textContent="No local records yet.";return}
+  records.forEach(record=>{
+    const div=document.createElement("div");div.className="item";
+    const title=document.createElement("b");title.textContent="Record: "+record.id;
+    const p=document.createElement("p");p.className="note";p.textContent="Message versions: "+record.messages.length;
+    const latest=record.messages.find(m=>m.messageId===record.latestMessageId);
+    const info=document.createElement("p");info.className="note";
+    info.textContent=latest?"Latest created: "+new Date(latest.createdAt).toLocaleString():"No active messages.";
+    const use=document.createElement("button");use.textContent="Select for Reuse";
+    use.onclick=()=>{$("recordSelect").value=record.id;window.scrollTo({top:0,behavior:"smooth"})};
+    const del=document.createElement("button");del.className="red";del.textContent="Delete Local Record";
+    del.onclick=()=>{
+      if(confirm("Delete this local record and its stored versions?")){
+        delete u.records[record.id];u.history=u.history.filter(h=>h.recordId!==record.id);saveDB();refresh();
+      }
+    };
+    div.append(title,p,info,use,del);box.appendChild(div);
+  });
+}
+function clearDecrypted(){
+  $("decrypted").value="";$("decryptPass").value="";
+  status("decryptStatus","Decrypted content cleared locally.",true);
+}
+
+/* GIFT DESIGN */
+const
+  mainEmojis=["🎁","🎂","💝","💐","🌹","🧸","💖","🎉","🎈","💎","🌈","⭐","🏆","💌","🪄","🎀","🦋","🌻","🍫","👑"];
+const decorEmojis=[
+"🌹","🌷","🌸","🌺","🌻","🌼","💐","🍀","🌿","🪷","💖","❤️","🩷","🧡","💛","💚","💙","💜","🤍","💔",
+"💕","💞","💓","💗","💘","💝","💟","❣️","✨","⭐","🌟","💫","🎉","🎊","🎈","🎀","🎁","🧸","🦋","🌈",
+"😊","😄","😁","🥰","😍","😘","😎","🤗","😂","🤣","😢","😭","🥺","😔","😞","😇","🤩","😋","😴","🤝",
+"👋","🙌","👏","🙏","👍","💐","💌","🍫","🍰","🧁","🎂","🍓","🍒","🌙","☀️","☁️","🕊️","🐻","🐼","🐰",
+"🎵","🎶","🪄","👑","💎","🏆","🚀","🌍","🪻","🪷","🌱","🌳","🔥","❄️","☕","🍕","🎨","🎭","🎆","🪅"
+];
+function buildEmojiGrids(){
+  const main=$("mainEmojiGrid");main.innerHTML="";
+  mainEmojis.forEach(e=>{
+    const b=document.createElement("button");b.type="button";b.textContent=e;
+    b.onclick=()=>{
+      selectedMain=e;$("giftMainEmoji").value=e;
+      [...main.children].forEach(x=>x.classList.toggle("selected",x.textContent===e));
+      previewGift();
+    };
+    if(e===selectedMain)b.classList.add("selected");
+    main.appendChild(b);
+  });
+  const decor=$("decorEmojiGrid");decor.innerHTML="";
+  decorEmojis.forEach(e=>{
+    const b=document.createElement("button");b.type="button";b.textContent=e;
+    b.onclick=()=>{
+      if(selectedDecor.has(e))selectedDecor.delete(e);else selectedDecor.add(e);
+      b.classList.toggle("selected",selectedDecor.has(e));previewGift();
+    };
+    if(selectedDecor.has(e))b.classList.add("selected");
+    decor.appendChild(b);
+  });
+}
+function safeColor(value,fallback){
+  return /^#[0-9a-fA-F]{6}$/.test(value)?value:fallback;
+}
+function getGiftDesign(){
+  const decorations=Array.from(selectedDecor).join(" ")+( $("giftExtraDecor").value.trim()?" "+$("giftExtraDecor").value.trim():"");
+  return {
+    title:$("giftTitle").value.trim()||"A Special Gift",
+    message:$("giftMessage").value,
+    bg:safeColor($("giftBg").value,"#7028a0"),
+    textColor:safeColor($("giftTextColor").value,"#ffffff"),
+    font:$("giftFont").value,
+    fontSize:Math.max(14,Math.min(32,Number($("giftFontSize").value)||19)),
+    mainEmoji:$("giftMainEmoji").value||"🎁",
+    decorations,
+    from:$("giftFrom").value.trim(),
+    theme:$("giftTheme").value
+  };
+}
+function previewGift(){
+  const g=getGiftDesign(),p=$("giftPreview");
+  p.style.background="linear-gradient(145deg,"+g.bg+",#07111f)";
+  p.style.color=g.textColor;p.style.fontFamily=g.font;
+  $("previewTopDecor").textContent=g.decorations;
+  $("previewBottomDecor").textContent=g.decorations;
+  $("previewMain").textContent=g.mainEmoji;
+  $("previewTitle").textContent=g.title;
+  $("previewMessage").textContent=g.message||"Your gift message will appear here.";
+  $("previewMessage").style.fontSize=g.fontSize+"px";
+  $("previewFrom").textContent=g.from?"From: "+g.from:"";
+}
+function applyTheme(){
+  const theme=$("giftTheme").value;
+  const presets={
+    birthday:{title:"🎂 Happy Birthday!",bg:"#7028a0",text:"#ffffff",emoji:"🎂",decor:["🎈","🎉","🎁","🌹","✨"]},
+    friendship:{title:"💖 Best Friends Forever",bg:"#174f79",text:"#ffffff",emoji:"🤝",decor:["💖","🌈","🦋","🌸","✨"]},
+    love:{title:"💝 A Special Gift For You",bg:"#9b174e",text:"#ffffff",emoji:"💝",decor:["❤️","💕","🌹","💗","✨"]},
+    hello:{title:"👋 Hello! How Are You?",bg:"#147d86",text:"#ffffff",emoji:"👋",decor:["😊","🌈","🌸","⭐","💖"]},
+    congrats:{title:"🏆 Congratulations!",bg:"#79510b",text:"#ffffff",emoji:"🏆",decor:["🎉","🎊","⭐","💎","✨"]},
+    thanks:{title:"🙏 Thank You!",bg:"#23643d",text:"#ffffff",emoji:"💐",decor:["🙏","🌷","💖","✨","🌼"]},
+    sad:{title:"🫂 Sending You Happiness",bg:"#334a87",text:"#ffffff",emoji:"🧸",decor:["🤗","💖","🌈","🌻","✨"]},
+    custom:{title:"✨ A Special Gift",bg:"#7028a0",text:"#ffffff",emoji:"🎁",decor:["🌹","💖","✨","🌸"]}
+  };
+  const p=presets[theme]||presets.custom;
+  $("giftTitle").value=p.title;$("giftBg").value=p.bg;$("giftTextColor").value=p.text;
+  selectedMain=p.emoji;$("giftMainEmoji").value=p.emoji;selectedDecor=new Set(p.decor);
+  buildEmojiGrids();previewGift();
+}
+async function createGift(){
+  try{
+    const u=user();if(!u)throw Error("Please log in first.");
+    if(!crypto.subtle)throw Error("Web Crypto unavailable. Use a supported browser context.");
+    if(typeof QRCode==="undefined")throw Error("QR library did not load. Connect to the internet and reload.");
+    const key=$("giftKey").value,confirmKey=$("giftKeyConfirm").value;
+    if(key.length<8)throw Error("Gift Key must be at least 8 characters.");
+    if(key!==confirmKey)throw Error("Gift Keys do not match.");
+    const design=getGiftDesign();
+    if(!design.message.trim())throw Error("Write a gift message first.");
+    if(u.coins<1000)throw Error("Not enough coins. Creating a gift costs 1,000 coins.");
+    const gift={
+      format:"SecureQRVaultGift",version:1,giftId:randomId(),
+      createdAt:Date.now(),design
+    };
+    const encrypted=await encryptMessageData(JSON.stringify(gift),key);
+    const payload=JSON.stringify({
+      type:"gift",version:1,giftId:gift.giftId,createdAt:gift.createdAt,encrypted
+    });
+    if(payload.length>2500)throw Error("This decorated gift is too large for one QR. Reduce the message or decorations and try again.");
+    // Deduct only after encryption and payload validation succeed.
+    u.coins-=1000;saveDB();refresh();
+    $("giftPayload").value=payload;
+    currentGiftQr=renderQR("giftQr",payload);
+    status("giftStatus","🎁 Gift encrypted successfully!\nCost: 1,000 coins.\nShare the QR or encrypted payload with the recipient.\nYour own collection has not been changed.",true);
+  }catch(e){status("giftStatus",e.message)}
+}
+function resetGiftForm(){
+  $("giftTitle").value="Happy Birthday!";$("giftMessage").value="";
+  $("giftBg").value="#7028a0";$("giftTextColor").value="#ffffff";
+  $("giftFont").value="Arial,sans-serif";$("giftFontSize").value="19";
+  $("giftExtraDecor").value="";$("giftFrom").value="";
+  $("giftKey").value="";$("giftKeyConfirm").value="";
+  $("giftTheme").value="birthday";selectedMain="🎁";
+  selectedDecor=new Set(["🌹","💖","✨","🌸","🎉","💝"]);
+  $("giftMainEmoji").value=selectedMain;$("giftPayload").value="";$("giftQr").innerHTML="";
+  buildEmojiGrids();applyTheme();status("giftStatus","Gift design reset.",true);
+}
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function giftPreviewHTML(g){
+  const bg=safeColor(g.bg,"#7028a0"),tc=safeColor(g.textColor,"#ffffff");
+  const fontList=["Arial,sans-serif","Georgia,serif","cursive","monospace"];
+  const font=fontList.includes(g.font)?g.font:"Arial,sans-serif";
+  const fs=Math.max(14,Math.min(32,Number(g.fontSize)||19));
+  const decor=escapeHTML(g.decorations||"✨ 💖 🌹");
+  return '<div class="gift-preview" style="background:linear-gradient(145deg,'+bg+',#07111f);color:'+tc+';font-family:'+font+'">'+
+    '<div class="decor">'+decor+'</div>'+
+    '<div class="big-emoji">'+escapeHTML(g.mainEmoji||"🎁")+'</div>'+
+    '<h2>'+escapeHTML(g.title||"A Special Gift")+'</h2>'+
+    '<div class="gift-message" style="font-size:'+fs+'px">'+escapeHTML(g.message||"")+'</div>'+
+    '<div class="decor">'+decor+'</div>'+
+    '<div class="from">'+(g.from?"From: "+escapeHTML(g.from):"")+'</div></div>';
+}
+async function openGift(data,key){
+  const u=user();
+  if(!data.encrypted||!data.giftId)throw Error("Invalid gift payload.");
+  const giftText=await decryptMessageData(data.encrypted,key);
+  let gift;
+  try{gift=JSON.parse(giftText)}catch(e){throw Error("This decrypted content is not a valid gift.")}
+  if(gift.format!=="SecureQRVaultGift"||!gift.design)throw Error("Invalid gift format.");
+  // Prevent duplicate collection entries for the same gift ID on this local account.
+  const existing=u.giftCollection.find(g=>g.giftId===gift.giftId);
+  if(existing){
+    status("decryptStatus","🎁 This gift is already in your collection. Opening it again.",true);
+  }else{
+    status("decryptStatus","🎉 Gift Opened Successfully! Saving to your collection in 8 seconds...",true);
+  }
+  $("decrypted").value="";
+  const viewer=document.createElement("div");
+  viewer.id="giftReveal";viewer.innerHTML=giftPreviewHTML(gift.design);
+  const old=$("giftReveal");if(old)old.remove();
+  $("decryptStatus").after(viewer);
+  viewer.scrollIntoView({behavior:"smooth",block:"center"});
+  if(revealTimer)clearTimeout(revealTimer);
+  revealTimer=setTimeout(()=>{
+    const current=user();
+    if(current&&!current.giftCollection.some(g=>g.giftId===gift.giftId)){
+      current.giftCollection.unshift({
+        giftId:gift.giftId,openedAt:Date.now(),giftCreatedAt:gift.createdAt||data.createdAt||Date.now(),
+        design:gift.design
+      });
+      current.giftCollection=current.giftCollection.slice(0,300);
+      saveDB();refresh();renderGiftCollection();
+      status("decryptStatus","🎉 Gift Opened Successfully! It has been saved to My Gift Collection.",true);
+    }else if(current){
+      status("decryptStatus","🎁 Gift shown. It is already saved in My Gift Collection.",true);
+    }
+    const el=$("giftReveal");if(el)el.remove();
+    showTab("collection");
+  },existing?4000:8000);
+    }
+  function renderGiftCollection(){
+  const u=user();if(!u)return;
+  const box=$("giftCollectionList");box.innerHTML="";
+  $("giftCount").textContent=u.giftCollection.length;
+  $("studioGiftCount").textContent=u.giftCollection.length;
+  if(!u.giftCollection.length){box.textContent="Your collection is empty. Open a gift using its encrypted payload and Gift Key.";return}
+  u.giftCollection.forEach(g=>{
+    const card=document.createElement("div");card.className="gift-card";
+    card.innerHTML=giftPreviewHTML(g.design);
+    const date=document.createElement("p");date.className="note";
+    date.textContent="Opened: "+new Date(g.openedAt).toLocaleString()+" | Gift created: "+new Date(g.giftCreatedAt).toLocaleString();
+    const view=document.createElement("button");view.textContent="View Gift";
+    view.onclick=()=>{
+      const old=$("collectionReveal");if(old)old.remove();
+      const reveal=document.createElement("div");reveal.id="collectionReveal";
+      reveal.innerHTML=giftPreviewHTML(g.design);
+      card.appendChild(reveal);reveal.scrollIntoView({behavior:"smooth",block:"center"});
+    };
+    const del=document.createElement("button");del.className="red";del.textContent="Remove";
+    del.onclick=()=>{
+      if(confirm("Remove this gift from your local collection?")){
+        u.giftCollection=u.giftCollection.filter(x=>x.giftId!==g.giftId);
+        saveDB();refresh();renderGiftCollection();
+      }
+    };
+    card.append(date,view,del);box.appendChild(card);
+  });
+}
+function clearGiftCollection(){
+  const u=user();if(!u)return;
+  if(!confirm("Delete all gifts from this local collection? This cannot be undone unless you have a backup."))return;
+  u.giftCollection=[];saveDB();refresh();renderGiftCollection();
+}
+function exportGiftCollection(){
+  const u=user();if(!u)return;
+  downloadJSON({
+    format:"SecureQRVaultGiftCollection",version:1,username:activeUser,
+    exportedAt:Date.now(),gifts:u.giftCollection
+  },"secure-qr-gift-collection.json");
+}
+function downloadJSON(obj,filename){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportBackup(){
+  const u=user();if(!u)return;
+  downloadJSON({format:"SecureQRVaultBackup",version:2,username:activeUser,data:u},"secure-qr-vault-backup.json");
+}
+function restoreBackup(){
+  const file=$("backupFile").files[0];if(!file){alert("Choose a JSON backup file first.");return}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const backup=JSON.parse(reader.result);
+      if(backup.format!=="SecureQRVaultBackup"||!backup.data||!backup.data.records)throw Error("Invalid backup file.");
+      if(!confirm("Replace current local vault data with this backup?"))return;
+      ensureUserFields(backup.data);db.users[activeUser]=backup.data;
+      saveDB();cleanup(false);refresh();renderGiftCollection();alert("Backup restored.");
+    }catch(e){alert("Restore failed: "+e.message)}
+  };
+  reader.readAsText(file);
+}
+
+$("recordSelect").addEventListener("change",()=>{
+  const id=$("recordSelect").value;
+  $("generateStatus").textContent=id
+    ?"Existing record selected. New encrypted message will be added to this record."
+    :"New record selected.";
+});
+["giftTitle","giftMessage","giftBg","giftTextColor","giftFont","giftFontSize","giftExtraDecor","giftFrom"].forEach(id=>{
+  $(id).addEventListener("input",previewGift);
+});
+buildEmojiGrids();applyTheme();
+
+setInterval(()=>{
+  if(activeUser&&$("appPanel")&&!$("appPanel").classList.contains("hidden"))cleanup(false);
+},5000);
+window.addEventListener("pageshow",()=>{if(activeUser)cleanup(false)});
+if(!crypto.subtle){
+  status("loginStatus","Secure Web Crypto unavailable. Use a supported browser context, preferably HTTPS or localhost.");
+}
+</script>
+</body>
+</html>
