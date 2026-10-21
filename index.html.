@@ -1,0 +1,886 @@
+
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure QR Vault</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+ --bg:#07111f;--panel:#101f32;--panel2:#162941;
+ --cyan:#35e6ff;--blue:#388bff;--purple:#bd77ff;
+ --green:#4dffb5;--gold:#ffd166;--text:#f1f7ff;--muted:#a6bad1;
+ --danger:#ff6584;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at top,#12294b,#07111f 55%);
+ color:var(--text);font-family:Arial,sans-serif}
+header{padding:16px;text-align:center;background:#0a1628;
+ border-bottom:1px solid #24415e;position:sticky;top:0;z-index:5}
+header h1{margin:0;color:var(--cyan);font-size:24px}
+header p{margin:6px 0 0;color:var(--muted);font-size:12px}
+#accountBar{display:flex;justify-content:center;gap:10px;align-items:center;
+ flex-wrap:wrap;margin-top:10px;font-size:13px}
+.coin{color:var(--gold);font-weight:bold}
+nav{display:flex;gap:7px;overflow-x:auto;padding:10px;background:#091525;
+ position:sticky;top:92px;z-index:4}
+nav button{white-space:nowrap;flex-shrink:0}
+button,.btn{
+ background:linear-gradient(135deg,#167caa,#3457bd);color:white;border:0;
+ border-radius:10px;padding:11px 14px;font-weight:bold;cursor:pointer;
+ margin:3px;transition:.15s
+}
+button:active{transform:scale(.97)}
+button.secondary{background:#263a52}
+button.green{background:#087b60}
+button.gold{background:#8c6410}
+button.red{background:#a52e4d}
+button.active{outline:2px solid var(--cyan)}
+main{max-width:1050px;margin:auto;padding:14px}
+.panel{background:linear-gradient(145deg,#102138,#0c192b);
+ border:1px solid #24425f;border-radius:17px;padding:16px;margin-bottom:14px;
+ box-shadow:0 8px 25px #0003}
+h2{font-size:21px;color:var(--cyan);margin:0 0 14px}
+h3{font-size:16px;color:var(--gold)}
+p,.hint{line-height:1.5;color:var(--muted);font-size:13px}
+label{display:block;color:#c8d9ed;font-size:13px;margin:10px 0 5px}
+input,textarea,select{width:100%;padding:12px;border-radius:9px;
+ border:1px solid #34516f;background:#071525;color:white;outline:none}
+textarea{min-height:85px;resize:vertical}
+input:focus,textarea:focus,select:focus{border-color:var(--cyan)}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.tool{background:#12243a;border:1px solid #29435f;padding:13px;border-radius:12px}
+.hidden{display:none!important}
+.status{padding:10px;border-radius:9px;background:#071525;color:var(--green);
+ margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere}
+#qrOutput{background:white;padding:12px;border-radius:10px;display:table;
+ margin:12px auto;min-height:10px}
+#qrOutput img,#qrOutput canvas{max-width:100%;height:auto}
+#editorCanvas{width:100%;max-height:480px;object-fit:contain;
+ background:#07111f;border:1px solid #35506e;border-radius:12px;touch-action:manipulation}
+.preview{background:#071525;border-radius:12px;padding:10px;text-align:center}
+.file{padding:12px;border:1px solid #29445f;border-radius:10px;margin:8px 0;
+ background:#0a192b;overflow-wrap:anywhere}
+.file strong{color:var(--cyan)}
+.file small{color:var(--muted)}
+.file button{padding:8px 10px;font-size:12px}
+#loginScreen{max-width:430px;margin:35px auto;padding:18px}
+#loginScreen h2{text-align:center}
+.emojiRow{display:flex;gap:5px;flex-wrap:wrap}
+.emojiRow button{font-size:21px;padding:8px;background:#203751}
+footer{text-align:center;color:#6f89a5;padding:20px;font-size:12px}
+@media(max-width:600px){
+ header h1{font-size:20px}
+ nav{top:104px}
+ .row{grid-template-columns:1fr}
+ main{padding:9px}
+ .panel{padding:12px}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>🔐 Secure QR Vault</h1>
+<p>Your personal QR, Photo, Poster & Gift Studio</p>
+<div id="accountBar" class="hidden">
+ <span id="welcome"></span>
+ <span class="coin">🪙 <span id="coinCount">0</span></span>
+ <button class="secondary" onclick="logout()">Logout</button>
+</div>
+</header>
+
+<section id="loginScreen" class="panel">
+<h2>🔑 Your Vault Login</h2>
+<p>पहली बार अकाउंट बनाएँ। अगली बार इसी ब्राउज़र में Login बना रहेगा, जब तक आप Logout नहीं करते।</p>
+<label>Your Name</label><input id="loginName" placeholder="अपना नाम लिखें">
+<label>Password</label><input id="loginPass" type="password" placeholder="अपना पासवर्ड लिखें">
+<button class="green" style="width:100%;margin-top:14px" onclick="login()">Login / Create Account</button>
+<div id="loginStatus" class="status"></div>
+<p>यह लोकल-ब्राउज़र डेमो है। इसका Login असली ऑनलाइन सर्वर वाला सुरक्षित अकाउंट नहीं है।</p>
+</section>
+
+<div id="app" class="hidden">
+<nav>
+<button class="active" onclick="showTab('home',this)">🏠 Home</button>
+<button onclick="showTab('message',this)">💬 Message QR</button>
+<button onclick="showTab('gift',this)">🎁 Gift Studio</button>
+<button onclick="showTab('photo',this)">🖼️ Photo Studio</button>
+<button onclick="showTab('poster',this)">🎨 Poster Maker</button>
+<button onclick="showTab('identity',this)">🪪 QR Identity</button>
+<button onclick="showTab('scan',this)">📷 Scan QR</button>
+<button onclick="showTab('files',this)">📁 My Files</button>
+<button onclick="showTab('settings',this)">⚙️ Settings</button>
+</nav>
+
+<main>
+<section id="home" class="tab">
+<div class="panel">
+<h2>Welcome to Your Vault ✨</h2>
+<p>एक ही ऐप में QR Messages, Gifts, Photo Editing, Poster Designing और Digital Identity बनाएँ।</p>
+<div class="grid">
+<div class="tool"><h3>🪙 Your Coins</h3><strong id="homeCoins">0</strong><p>नई चीजें बनाने के लिए Coins इस्तेमाल करें।</p></div>
+<div class="tool"><h3>🖼️ Photo Studio</h3><p>फोटो चुनें, टेक्स्ट लगाएँ और सेव करें।</p><button onclick="showTab('photo')">Open Studio</button></div>
+<div class="tool"><h3>🎨 Poster Maker</h3><p>किसी के लिए पोस्टर डिजाइन करें।</p><button onclick="showTab('poster')">Make Poster</button></div>
+<div class="tool"><h3>🪪 QR Identity</h3><p>फोन, वेबसाइट और YouTube QR बनाएँ।</p><button onclick="showTab('identity')">Create QR</button></div>
+</div>
+</div>
+<div class="panel">
+<h2>Coin Price List</h2>
+<div class="grid">
+<div class="tool">💬 Message QR<br><strong>100 Coins</strong></div>
+<div class="tool">🎁 Gift<br><strong>1,000 Coins</strong></div>
+<div class="tool">🖼️ Photo Design<br><strong>100 Coins</strong></div>
+<div class="tool">🎨 Poster<br><strong>150 Coins</strong></div>
+<div class="tool">🔗 Basic QR Identity<br><strong>20 Coins</strong></div>
+<div class="tool">📇 Contact QR<br><strong>50 Coins</strong></div>
+<div class="tool">🔒 Secret QR<br><strong>80 Coins</strong></div>
+</div>
+<p>यह लोकल डेमो है। Coins केवल इसी ब्राउज़र के अकाउंट में हैं; इन्हें असली पैसे की तरह इस्तेमाल नहीं किया जा सकता।</p>
+</div>
+</section>
+
+<section id="message" class="tab hidden">
+<div class="panel">
+<h2>💬 Message QR Vault</h2>
+<label>Message Title</label><input id="msgTitle" placeholder="जैसे Personal Message">
+<label>Your Message</label><textarea id="msgText" placeholder="अपना मैसेज लिखें"></textarea>
+<div class="row">
+<div><label>Expiry Timer</label><select id="msgExpiry"><option value="none">No timer</option><option value="1">1 minute</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option></select></div>
+<div><label>Read Option</label><select id="msgRead"><option value="normal">Normal</option><option value="once">Read once (local demo)</option></select></div>
+</div>
+<button onclick="createMessage()">Create Message QR — 100 Coins</button>
+<div id="messageResult" class="status">Your QR will appear here.</div>
+<div id="messageQR" class="preview"></div>
+</div>
+<div class="panel">
+<h2>📥 Open Message</h2>
+<p>किसी से मिला QR payload यहाँ paste करके message खोलें।</p>
+<textarea id="incomingMessage" placeholder="Paste QR payload here"></textarea>
+<button class="green" onclick="openMessage()">Open Message</button>
+<div id="openedMessage" class="status"></div>
+</div>
+</section>
+
+<section id="gift" class="tab hidden">
+<div class="panel">
+<h2>🎁 Gift Studio</h2>
+<label>Gift Theme</label>
+<select id="giftTheme" onchange="applyGiftTheme()">
+<option value="birthday">🎂 Birthday</option>
+<option value="friendship">🤝 Friendship</option>
+<option value="love">❤️ Love / Appreciation</option>
+<option value="hello">👋 Hello</option>
+<option value="congrats">🎉 Congratulations</option>
+<option value="thanks">🙏 Thank You</option>
+<option value="cheer">🌈 Cheer Up</option>
+</select>
+<label>Sender Name</label><input id="giftSender" placeholder="From...">
+<label>Receiver Name</label><input id="giftReceiver" placeholder="To...">
+<label>Gift Message</label><textarea id="giftText" placeholder="अपना खास मैसेज लिखें"></textarea>
+<label>Decorations</label>
+<div class="emojiRow" id="giftEmojis"></div>
+<div class="row">
+<div><label>Background Color</label><input id="giftBg" type="color" value="#162b58" oninput="previewGift()"></div>
+<div><label>Text Color</label><input id="giftFg" type="color" value="#ffffff" oninput="previewGift()"></div>
+</div>
+<label>Font Size</label><input id="giftSize" type="range" min="16" max="38" value="24" oninput="previewGift()">
+<div id="giftPreview" class="preview" style="min-height:160px;margin-top:12px"></div>
+<button onclick="createGift()">Create Gift QR — 1,000 Coins</button>
+<div id="giftStatus" class="status"></div>
+<div id="giftQR" class="preview"></div>
+</div>
+<div class="panel">
+<h2>🔓 Open Received Gift</h2>
+<label>Paste Gift QR Payload</label><textarea id="giftPayload" placeholder="Paste the gift payload"></textarea>
+<button class="green" onclick="openGift()">Open Gift</button>
+<div id="giftOpened" class="status"></div>
+</div>
+</section>
+
+<section id="photo" class="tab hidden">
+<div class="panel">
+<h2>🖼️ Photo & Collage Studio</h2>
+<p>Gallery से फोटो चुनें। टेक्स्ट और इमोजी जोड़ें। तैयार डिजाइन को डाउनलोड या ऐप के लोकल Storage में सेव करें।</p>
+<label>Select Photo(s) from Gallery</label>
+<input id="photoUpload" type="file" accept="image/*" multiple onchange="loadImages(event)">
+<label>Design Background</label><input id="photoBg" type="color" value="#152746" onchange="redrawEditor()">
+<label>Add Text</label><input id="photoText" placeholder="अपना टेक्स्ट लिखें" oninput="redrawEditor()">
+<div class="row">
+<div><label>Text Color</label><input id="photoColor" type="color" value="#ffffff" onchange="redrawEditor()"></div>
+<div><label>Text Size</label><input id="photoSize" type="range" min="16" max="64" value="32" oninput="redrawEditor()"></div>
+</div>
+<label>Add Sticker / Emoji</label>
+<div class="emojiRow" id="photoEmojis"></div>
+<canvas id="editorCanvas" width="720" height="720"></canvas>
+<div>
+<button onclick="downloadDesign()">⬇️ Save to Gallery</button>
+<button class="green" onclick="saveDesign()">💾 Save to App Storage — 100 Coins</button>
+<button class="gold" onclick="shareDesignQR()">▦ Create Share QR</button>
+</div>
+<div id="photoStatus" class="status"></div>
+<div id="photoQR" class="preview"></div>
+</div>
+</section>
+
+<section id="poster" class="tab hidden">
+<div class="panel">
+<h2>🎨 Poster Maker</h2>
+<label>Poster Template</label>
+<select id="posterTheme" onchange="applyPosterTheme()">
+<option value="birthday">Birthday Poster</option>
+<option value="business">Business Promotion</option>
+<option value="youtube">YouTube Channel</option>
+<option value="festival">Festival Poster</option>
+<option value="invitation">Invitation</option>
+<option value="congrats">Congratulations</option>
+<option value="custom">Custom Poster</option>
+</select>
+<label>Poster Title</label><input id="posterTitle" value="YOUR AMAZING POSTER" oninput="redrawEditor()">
+<label>Subtitle / Details</label><textarea id="posterSub" placeholder="Name, date, business details... " oninput="redrawEditor()"></textarea>
+<label>Upload Photo (optional)</label><input id="posterUpload" type="file" accept="image/*" onchange="loadPosterImage(event)">
+<div class="row">
+<div><label>Background Color</label><input id="posterBg" type="color" value="#39165e" onchange="redrawEditor()"></div>
+<div><label>Text Color</label><input id="posterColor" type="color" value="#ffffff" onchange="redrawEditor()"></div>
+</div>
+<label>Decorative Emoji</label>
+<div class="emojiRow" id="posterEmojis"></div>
+<canvas id="posterCanvas" width="720" height="900" style="width:100%;max-height:520px;background:#07111f;border-radius:12px"></canvas>
+<button onclick="downloadPoster()">⬇️ Save Poster to Gallery</button>
+<button class="green" onclick="savePoster()">💾 Save to My Posters — 150 Coins</button>
+<button class="gold" onclick="sharePosterQR()">▦ Create Poster Share QR</button>
+<div id="posterStatus" class="status"></div>
+<div id="posterQR" class="preview"></div>
+</div>
+</section>
+
+<section id="identity" class="tab hidden">
+<div class="panel">
+<h2>🪪 QR Code Identity</h2>
+<label>Identity Type</label>
+<select id="identityType" onchange="identityFields()">
+<option value="website">Website / URL — 20 Coins</option>
+<option value="youtube">YouTube Channel / Video — 20 Coins</option>
+<option value="phone">Phone Number — 20 Coins</option>
+<option value="contact">Contact Card — 50 Coins</option>
+<option value="text">Custom Text — 20 Coins</option>
+<option value="secret">Secret Identity — 80 Coins</option>
+</select>
+<div id="identityInputs"></div>
+<button onclick="createIdentity()">Generate & Save QR Identity</button>
+<div id="identityStatus" class="status"></div>
+<div id="identityQR" class="preview"></div>
+</div>
+<div class="panel">
+<h2>🔎 Test / Open Identity</h2>
+<p>QR से पढ़ा गया text यहाँ paste करें। वेबसाइट या YouTube URL खोलने से पहले लिंक को जाँच लें।</p>
+<textarea id="identityOpenText" placeholder="Paste QR content here"></textarea>
+<button onclick="openIdentity()">Open / View Identity</button>
+<div id="identityOpenStatus" class="status"></div>
+</div>
+</section>
+
+<section id="scan" class="tab hidden">
+<div class="panel">
+<h2>📷 Scan QR Code</h2>
+<p>कुछ ब्राउज़र में कैमरा QR detection उपलब्ध होता है। कैमरा HTTPS या समर्थित secure context में ही चल सकता है।</p>
+<button onclick="startScan()">Start Camera Scan</button>
+<button class="red" onclick="stopScan()">Stop Camera</button>
+<video id="scanVideo" playsinline style="width:100%;max-height:330px;background:#000;border-radius:12px"></video>
+<div id="scanStatus" class="status">Camera not started.</div>
+<label>Or paste scanned QR text</label>
+<textarea id="scanPaste" placeholder="Paste QR content here"></textarea>
+<button onclick="handleScannedText()">Process QR Text</button>
+</div>
+</section>
+
+<section id="files" class="tab hidden">
+<div class="panel">
+<h2>📁 My Files & Collections</h2>
+<p>हर तरह की फाइल अपनी अलग सूची में सेव होती है।</p>
+<div class="grid">
+<button onclick="renderFiles('photos')">🖼️ My Photo Designs</button>
+<button onclick="renderFiles('posters')">🎨 My Posters</button>
+<button onclick="renderFiles('identities')">🪪 My QR Identities</button>
+<button onclick="renderFiles('gifts')">🎁 My Gift Collection</button>
+<button onclick="renderFiles('messages')">💬 Message History</button>
+</div>
+<div id="filesList"></div>
+</div>
+</section>
+
+<section id="settings" class="tab hidden">
+<div class="panel">
+<h2>⚙️ Settings & Backup</h2>
+<p>आपका डेटा इस ब्राउज़र के localStorage में रहता है। ब्राउज़र डेटा मिटाने या दूसरे फोन पर जाने पर डेटा गायब हो सकता है।</p>
+<button onclick="exportBackup()">⬇️ Export Backup JSON</button>
+<label>Restore Backup JSON</label><input type="file" id="backupFile" accept=".json,application/json">
+<button onclick="importBackup()">Restore Backup</button>
+<button class="red" onclick="clearCollections()">Delete All Saved Collections</button>
+<div id="settingsStatus" class="status"></div>
+<h3>Security Notes</h3>
+<p>इस संस्करण में लॉगिन और Coins लोकल हैं, इसलिए कोई भी तकनीकी रूप से localStorage बदल सकता है। असली password vault या सुरक्षित online accounts के लिए server-side authentication और सुरक्षित key management चाहिए।</p>
+</div>
+</section>
+</main>
+</div>
+
+<footer>Secure QR Vault · Single-file browser prototype</footer>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const DBKEY="secure_qr_vault_v1";
+const SESSIONKEY="secure_qr_session_v1";
+let db=null,currentUser=null;
+let photoImages=[],posterImage=null,photoStickers=[],posterStickers=[];
+let scanStream=null,scanLoop=null;
+let lastDesignData=null,lastPosterData=null;
+
+function freshDB(){
+ return {users:{},activeUser:null};
+}
+function loadDB(){
+ try{return JSON.parse(localStorage.getItem(DBKEY))||freshDB()}
+ catch(e){return freshDB()}
+}
+function saveDB(){
+ try{localStorage.setItem(DBKEY,JSON.stringify(db));return true}
+ catch(e){alert("Storage भर गया है। कुछ पुरानी फोटो या फाइलें हटाएँ या Backup लें।");return false}
+}
+function userData(){
+ return db.users[currentUser];
+}
+function saveUser(){
+ if(currentUser&&db.users[currentUser])saveDB();
+}
+function esc(s){
+ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function login(){
+ const name=$("loginName").value.trim();
+ const pass=$("loginPass").value;
+ if(!name||!pass){$("loginStatus").textContent="Name और Password दोनों लिखें।";return}
+ db=loadDB();
+ let key=name.toLowerCase();
+ if(!db.users[key]){
+  db.users[key]={name:name,password:pass,coins:20000,lastReward:new Date().toDateString(),
+   photos:[],posters:[],identities:[],gifts:[],messages:[]};
+ }else if(db.users[key].password!==pass){
+  $("loginStatus").textContent="Password सही नहीं है।";
+  return;
+ }
+ currentUser=key;
+ if(!Array.isArray(userData().photos))userData().photos=[];
+ if(!Array.isArray(userData().posters))userData().posters=[];
+ if(!Array.isArray(userData().identities))userData().identities=[];
+ if(!Array.isArray(userData().gifts))userData().gifts=[];
+ if(!Array.isArray(userData().messages))userData().messages=[];
+ if(!Number.isFinite(userData().coins))userData().coins=20000;
+ const today=new Date().toDateString();
+ if(userData().lastReward!==today){
+  userData().coins+=20000;userData().lastReward=today;
+ }
+ db.activeUser=key;saveDB();
+ localStorage.setItem(SESSIONKEY,key);
+ $("loginScreen").classList.add("hidden");
+ $("app").classList.remove("hidden");
+ $("accountBar").classList.remove("hidden");
+ updateCoins();initEditors();applyGiftTheme();identityFields();
+}
+function logout(){
+ localStorage.removeItem(SESSIONKEY);
+ db=loadDB();db.activeUser=null;saveDB();
+ currentUser=null;
+ $("app").classList.add("hidden");$("accountBar").classList.add("hidden");
+ $("loginScreen").classList.remove("hidden");
+ $("loginPass").value="";
+}
+function updateCoins(){
+ if(!currentUser)return;
+ $("coinCount").textContent=userData().coins;
+ $("homeCoins").textContent=userData().coins;
+ $("welcome").textContent="Hello, "+userData().name;
+}
+function spendCoins(n){
+ if(userData().coins<n){alert("Coins कम हैं। आपके पास "+userData().coins+" Coins हैं।");return false}
+ userData().coins-=n;saveUser();updateCoins();return true;
+}
+function showTab(id,btn){
+ document.querySelectorAll(".tab").forEach(x=>x.classList.add("hidden"));
+ $(id).classList.remove("hidden");
+ document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+ if(btn)btn.classList.add("active");
+ if(id==="photo")redrawEditor();
+ if(id==="poster")redrawEditor();
+}
+function newId(){return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8)}
+function stamp(){return new Date().toLocaleString()}
+function makeQR(text,target){
+ const el=$(target);el.innerHTML="";
+ const holder=document.createElement("div");holder.id="qrOutput";
+ el.appendChild(holder);
+ if(!window.QRCode){
+  el.innerHTML="<p>QR library load नहीं हुई। इंटरनेट कनेक्शन जाँचें।</p>";
+  const t=document.createElement("textarea");t.value=text;el.appendChild(t);return;
+ }
+ try{
+  new QRCode(holder,{text:String(text),width:230,height:230,
+   colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.L});
+  const ta=document.createElement("textarea");ta.value=text;ta.readOnly=true;
+  ta.style.marginTop="10px";el.appendChild(ta);
+  const b=document.createElement("button");b.textContent="Copy QR Payload";
+  b.onclick=()=>copyText(text);el.appendChild(b);
+ }catch(e){
+  el.innerHTML="<p>यह डेटा एक QR में फिट नहीं हुआ। Text को छोटा करें।</p>";
+  const ta=document.createElement("textarea");ta.value=text;el.appendChild(ta);
+ }
+}
+async function copyText(t){
+ try{await navigator.clipboard.writeText(t);alert("Copied!")}
+ catch(e){prompt("Copy this text:",t)}
+}
+function createMessage(){
+ const title=$("msgTitle").value.trim()||"Message";
+ const message=$("msgText").value.trim();
+ if(!message){alert("पहले Message लिखें।");return}
+ const payload=JSON.stringify({app:"SecureQRVault",type:"message",id:newId(),
+  title,message,expiry:$("msgExpiry").value,read:$("msgRead").value,created:stamp()});
+ if(!spendCoins(100))return;
+ userData().messages.unshift({id:newId(),title,payload,created:stamp()});saveUser();
+ makeQR(payload,"messageQR");
+ $("messageResult").textContent="Message saved in Message History. Share the payload or QR with the recipient.";
+}
+function openMessage(){
+ try{
+  const d=JSON.parse($("incomingMessage").value);
+  if(d.app!=="SecureQRVault"||d.type!=="message")throw Error("यह Secure QR Vault message नहीं है।");
+  if(d.expiry!=="none"&&d.created){
+   const mins=Number(d.expiry);
+   const time=Date.parse(d.created);
+   if(Number.isFinite(mins)&&Number.isFinite(time)&&Date.now()>time+mins*60000)
+    throw Error("इस message का timer समाप्त हो गया है।");
+  }
+  $("openedMessage").textContent="Title: "+d.title+"\n\n"+d.message+
+   "\n\nCreated: "+(d.created||"Unknown")+
+   (d.read==="once"?"\n\nNote: Read Once is only a local demo; copied QR data cannot be revoked.":"");
+ }catch(e){$("openedMessage").textContent="Message open नहीं हुआ: "+e.message}
+}
+const themes={
+ birthday:["#48206d","#fff2a6","🎂🎉🎈"],
+ friendship:["#173c55","#b7ffec","🤝💙🌟"],
+ love:["#651c42","#ffe0ed","❤️🌹💖"],
+ hello:["#124c64","#e1fbff","👋😊✨"],
+ congrats:["#5c3b12","#fff1ad","🏆🎉⭐"],
+ thanks:["#254b35","#e0ffe6","🙏💚🌸"],
+ cheer:["#3c246b","#f5eaff","🌈☀️💜"]
+};
+function applyGiftTheme(){
+ const t=themes[$("giftTheme").value]||themes.birthday;
+ $("giftBg").value=t[0];$("giftFg").value=t[1];
+ $("giftEmojis").innerHTML="";
+ t[2].split("").forEach(e=>{let b=document.createElement("button");b.textContent=e;b.onclick=()=>{$("giftText").value+=\" \"+e;previewGift()};$("giftEmojis").appendChild(b)});
+ previewGift();
+}
+function previewGift(){
+ if(!$("giftPreview"))return;
+ const emojis=themes[$("giftTheme").value]?.[2]||"🎁✨";
+ $("giftPreview").style.background=$("giftBg").value;
+ $("giftPreview").style.color=$("giftFg").value;
+ $("giftPreview").style.fontSize=$("giftSize").value+"px";
+ $("giftPreview").innerHTML="<div style='font-size:28px'>"+esc(emojis)+"</div>"+
+ "<h3 style='color:inherit'>"+esc($("giftReceiver").value||"A Special Gift")+"</h3>"+
+ "<p style='color:inherit;white-space:pre-wrap'>"+esc($("giftText").value||"Your message goes here")+"</p>"+
+ "<small>From: "+esc($("giftSender").value||"Someone special")+"</small>";
+}
+function createGift(){
+ const text=$("giftText").value.trim();
+ if(!text){alert("Gift message लिखें।");return}
+ const gift={app:"SecureQRVault",type:"gift",id:newId(),
+  theme:$("giftTheme").value,sender:$("giftSender").value,receiver:$("giftReceiver").value,
+  text,bg:$("giftBg").value,fg:$("giftFg").value,size:$("giftSize").value,
+  created:stamp()};
+ const payload=JSON.stringify(gift);
+ if(payload.length>1800){alert("Gift message छोटा करें ताकि QR में फिट हो सके।");return}
+ if(!spendCoins(1000))return;
+ makeQR(payload,"giftQR");
+ $("giftStatus").textContent="Gift QR created. यह creator की My Gift Collection में अपने-आप सेव नहीं होगा। Receiver को payload और QR भेजें।";
+}
+function openGift(){
+ try{
+  const d=JSON.parse($("giftPayload").value);
+  if(d.app!=="SecureQRVault"||d.type!=="gift")throw Error("यह valid Gift QR payload नहीं है।");
+  const card={id:d.id||newId(),sender:d.sender,receiver:d.receiver,text:d.text,
+   theme:d.theme,bg:d.bg,fg:d.fg,size:d.size,created:d.created,opened:stamp()};
+  userData().gifts.unshift(card);saveUser();
+  $("giftOpened").innerHTML="";
+  const box=document.createElement("div");box.style.cssText="padding:18px;border-radius:14px;text-align:center";
+  box.style.background=card.bg||"#162b58";box.style.color=card.fg||"#fff";
+  box.style.fontSize=(Number(card.size)||24)+"px";
+  box.innerHTML="<h2 style='color:inherit'>🎁 Gift Opened Successfully!</h2>"+
+   "<h3 style='color:inherit'>"+esc(card.receiver||"Special Person")+"</h3>"+
+   "<p style='color:inherit;white-space:pre-wrap'>"+esc(card.text||"")+"</p>"+
+   "<small>From: "+esc(card.sender||"Unknown")+"</small><p style='font-size:12px'>Opened: "+esc(card.opened)+"</p>";
+  $("giftOpened").appendChild(box);
+  const p=document.createElement("p");p.textContent="Gift आपकी My Gift Collection में सेव हो गया है।";
+  $("giftOpened").appendChild(p);
+ }catch(e){$("giftOpened").textContent="Gift open नहीं हुआ: "+e.message}
+}
+function initEditors(){
+ initEmoji("photoEmojis",["❤️","🌹","⭐","✨","🔥","🌈","🎉","😊","👑","💙","🌸","🎁"],e=>{photoStickers.push(e);redrawEditor()});
+ initEmoji("posterEmojis",["🎉","⭐","🔥","❤️","🌹","✨","🏆","🎂","🌈","💎","📣","🎁"],e=>{posterStickers.push(e);redrawEditor()});
+ if(!$("editorCanvas").dataset.ready){
+  $("editorCanvas").dataset.ready="1";
+  redrawEditor();
+ }
+ redrawPoster();
+}
+function initEmoji(target,arr,fn){
+ $(target).innerHTML="";
+ arr.forEach(e=>{const b=document.createElement("button");b.textContent=e;b.onclick=()=>fn(e);$(target).appendChild(b)});
+}
+function loadImages(event){
+ photoImages=[];
+ const files=Array.from(event.target.files||[]).slice(0,4);
+ if(!files.length)return;
+ let loaded=0;
+ files.forEach(f=>{
+  const img=new Image();
+  img.onload=()=>{photoImages.push(img);loaded++;if(loaded===files.length)redrawEditor()};
+  img.onerror=()=>{loaded++;if(loaded===files.length)redrawEditor()};
+  img.src=URL.createObjectURL(f);
+ });
+}
+function loadPosterImage(event){
+ const f=event.target.files&&event.target.files[0];if(!f)return;
+ const img=new Image();
+ img.onload=()=>{posterImage=img;redrawPoster()};
+ img.src=URL.createObjectURL(f);
+   }
+function drawCover(ctx,img,x,y,w,h){
+ const scale=Math.max(w/img.width,h/img.height);
+ const sw=w/scale,sh=h/scale;
+ ctx.drawImage(img,(img.width-sw)/2,(img.height-sh)/2,sw,sh,x,y,w,h);
+}
+function wrapText(ctx,text,maxWidth){
+ const words=String(text||"").split(/\s+/);let lines=[],line="";
+ words.forEach(word=>{
+  const test=line?line+" "+word:word;
+  if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}
+  else line=test;
+ });
+ if(line)lines.push(line);
+ return lines;
+}
+function drawBackground(ctx,w,h,color){
+ ctx.fillStyle=color||"#152746";ctx.fillRect(0,0,w,h);
+ const g=ctx.createRadialGradient(w*.5,h*.25,10,w*.5,h*.5,w*.8);
+ g.addColorStop(0,"#ffffff12");g.addColorStop(1,"#00000033");
+ ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+}
+function redrawEditor(){
+ const c=$("editorCanvas");if(!c)return;
+ const ctx=c.getContext("2d"),w=c.width,h=c.height;
+ drawBackground(ctx,w,h,$("photoBg")?.value||"#152746");
+ if(photoImages.length===1)drawCover(ctx,photoImages[0],0,0,w,h);
+ else if(photoImages.length>1){
+  const cols=2,rows=Math.ceil(photoImages.length/2),cw=w/cols,ch=h/rows;
+  photoImages.forEach((im,i)=>drawCover(ctx,im,(i%cols)*cw,Math.floor(i/cols)*ch,cw,ch));
+ }else{
+  ctx.fillStyle="#ffffff22";ctx.fillRect(30,30,w-60,h-60);
+  ctx.fillStyle="#dff7ff";ctx.textAlign="center";ctx.font="bold 30px Arial";
+  ctx.fillText("PHOTO & COLLAGE STUDIO",w/2,h/2-10);
+  ctx.font="20px Arial";ctx.fillText("Choose a photo to begin",w/2,h/2+28);
+ }
+ ctx.fillStyle=$("photoColor")?.value||"#ffffff";
+ ctx.textAlign="center";ctx.font="bold "+($("photoSize")?.value||32)+"px Arial";
+ const lines=wrapText(ctx,$("photoText")?.value||"",w-70);
+ let y=h-45-lines.length*(Number($("photoSize")?.value||32)+8);
+ lines.forEach(line=>{ctx.shadowColor="#000";ctx.shadowBlur=5;ctx.fillText(line,w/2,y);y+=Number($("photoSize")?.value||32)+8});
+ ctx.shadowBlur=0;
+ photoStickers.forEach((e,i)=>{ctx.font="48px Arial";ctx.fillText(e,55+(i%5)*135,75+Math.floor(i/5)*60)});
+ lastDesignData=c.toDataURL("image/jpeg",.82);
+}
+function redrawPoster(){
+ const c=$("posterCanvas");if(!c)return;
+ const ctx=c.getContext("2d"),w=c.width,h=c.height;
+ drawBackground(ctx,w,h,$("posterBg")?.value||"#39165e");
+ if(posterImage)drawCover(ctx,posterImage,55,100,w-110,h-220);
+ ctx.strokeStyle=$("posterColor")?.value||"#fff";ctx.lineWidth=8;ctx.strokeRect(18,18,w-36,h-36);
+ ctx.textAlign="center";ctx.fillStyle=$("posterColor")?.value||"#fff";
+ ctx.shadowColor="#000";ctx.shadowBlur=8;ctx.font="bold 48px Arial";
+ const title=wrapText(ctx,$("posterTitle")?.value||"YOUR POSTER",w-80);
+ let y=85;title.slice(0,3).forEach(line=>{ctx.fillText(line,w/2,y);y+=55});
+ ctx.font="28px Arial";
+ const sub=wrapText(ctx,$("posterSub")?.value||"",w-80);
+ const subY=posterImage?h-160:y+45;
+ sub.slice(0,5).forEach((line,i)=>ctx.fillText(line,w/2,subY+i*38));
+ posterStickers.forEach((e,i)=>{ctx.font="42px Arial";ctx.fillText(e,70+(i%5)*145,150+Math.floor(i/5)*55)});
+ ctx.shadowBlur=0;
+ lastPosterData=c.toDataURL("image/jpeg",.82);
+}
+function applyPosterTheme(){
+ const t=$("posterTheme").value;
+ const presets={
+ birthday:["#7c245e","#fff1ac","🎂 HAPPY BIRTHDAY"],
+ business:["#102d4d","#ffffff","YOUR BUSINESS"],
+ youtube:["#5b1717","#ffffff","SUBSCRIBE"],
+ festival:["#8c4315","#fff4b5","HAPPY FESTIVAL"],
+ invitation:["#244833","#fff5d6","YOU ARE INVITED"],
+ congrats:["#3a286f","#ffe8a5","CONGRATULATIONS"],
+ custom:["#39165e","#ffffff","YOUR AMAZING POSTER"]
+ };
+ const p=presets[t];$("posterBg").value=p[0];$("posterColor").value=p[1];$("posterTitle").value=p[2];
+ redrawPoster();
+}
+function downloadCanvas(canvas,name){
+ const a=document.createElement("a");
+ a.download=name;a.href=canvas.toDataURL("image/png");a.click();
+}
+function downloadDesign(){redrawEditor();downloadCanvas($("editorCanvas"),"photo-design.png")}
+function downloadPoster(){redrawPoster();downloadCanvas($("posterCanvas"),"my-poster.png")}
+function saveDesign(){
+ redrawEditor();
+ if(!spendCoins(100))return;
+ const file={id:newId(),name:"Photo Design "+new Date().toLocaleDateString(),data:lastDesignData,created:stamp()};
+ userData().photos.unshift(file);
+ if(!saveDB()){userData().photos.shift();userData().coins+=100;updateCoins();return}
+ $("photoStatus").textContent="Design My Photo Designs में सेव हो गई।";
+}
+function savePoster(){
+ redrawPoster();
+ if(!spendCoins(150))return;
+ const file={id:newId(),name:$("posterTitle").value||"My Poster",data:lastPosterData,created:stamp()};
+ userData().posters.unshift(file);
+ if(!saveDB()){userData().posters.shift();userData().coins+=150;updateCoins();return}
+ $("posterStatus").textContent="Poster My Posters में सेव हो गया।";
+}
+function shareDesignQR(){
+ redrawEditor();
+ const data={app:"SecureQRVault",type:"design-reference",format:"image/jpeg",
+  note:"Photo image is stored on the creator's device. Send the exported image file separately to share the full design.",
+  name:"Photo Design",created:stamp()};
+ makeQR(JSON.stringify(data),"photoQR");
+ $("photoStatus").textContent="QR में share information है, पूरी फोटो नहीं। पूरी फोटो दूसरे व्यक्ति को अलग से भेजें।";
+}
+function sharePosterQR(){
+ redrawPoster();
+ const data={app:"SecureQRVault",type:"poster-reference",
+  note:"Poster image is stored on the creator's device. Send the exported image file separately to share the full poster.",
+  name:$("posterTitle").value,created:stamp()};
+ makeQR(JSON.stringify(data),"posterQR");
+ $("posterStatus").textContent="QR में poster details हैं, पूरी image नहीं। Poster PNG अलग से भेजें।";
+}
+function identityFields(){
+ const t=$("identityType").value;
+ let html="";
+ if(t==="website"||t==="youtube"){
+  html='<label>URL</label><input id="identValue" placeholder="https://...">';
+ }else if(t==="phone"){
+  html='<label>Phone Number</label><input id="identValue" type="tel" placeholder="+91...">';
+ }else if(t==="contact"){
+  html='<label>Name</label><input id="identName" placeholder="Full name"><label>Phone</label><input id="identPhone" type="tel" placeholder="+91..."><label>Email (optional)</label><input id="identEmail" type="email" placeholder="name@example.com">';
+ }else if(t==="text"){
+  html='<label>Your Text</label><textarea id="identValue" placeholder="Write your information"></textarea>';
+ }else{
+  html='<label>Secret Text</label><textarea id="identValue" placeholder="Do not use your real account password"></textarea><label>Passphrase</label><input id="identPass" type="password" placeholder="Create a passphrase">';
+ }
+ $("identityInputs").innerHTML=html;
+}
+async function encryptText(text,password){
+ const enc=new TextEncoder();
+ const salt=crypto.getRandomValues(new Uint8Array(16));
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const material=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveKey"]);
+ const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:150000,hash:"SHA-256"},
+ material,{name:"AES-GCM",length:256},false,["encrypt"]);
+ const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(text));
+ const to64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
+ return {alg:"AES-GCM",salt:to64(salt),iv:to64(iv),data:to64(cipher)};
+                           }
+  async function createIdentity(){
+ const t=$("identityType").value;
+ let value="",cost=20;
+ if(t==="contact"){
+  value=JSON.stringify({name:$("identName").value,phone:$("identPhone").value,email:$("identEmail").value});
+  cost=50;
+ }else if(t==="secret"){
+  const text=$("identValue").value,pass=$("identPass").value;cost=80;
+  if(!text||!pass){alert("Secret Text और Passphrase भरें।");return}
+  if(!crypto?.subtle){alert("इस ब्राउज़र में secure encryption उपलब्ध नहीं है। HTTPS या localhost इस्तेमाल करें।");return}
+  try{value=JSON.stringify({secret:true,cipher:await encryptText(text,pass)});}
+  catch(e){alert("Encryption failed: "+e.message);return}
+ }else{
+  value=$("identValue").value.trim();
+  if(!value){alert("पहले जानकारी लिखें।");return}
+  if((t==="website"||t==="youtube")&&!/^https?:\/\//i.test(value)){
+   alert("सही URL डालें, जो https:// या http:// से शुरू हो।");return
+  }
+ }
+ if(!spendCoins(cost))return;
+ const payload=JSON.stringify({app:"SecureQRVault",type:"identity",identityType:t,value,created:stamp()});
+ if(payload.length>1800){
+  userData().coins+=cost;updateCoins();saveUser();
+  alert("यह जानकारी एक QR में बहुत बड़ी है। इसे छोटा करें।");return
+ }
+ userData().identities.unshift({id:newId(),name:t+" Identity",payload,created:stamp()});saveUser();
+ makeQR(payload,"identityQR");
+ $("identityStatus").textContent="QR Identity बनाई गई और My QR Identities में सेव हुई।";
+}
+function openIdentity(){
+ const raw=$("identityOpenText").value.trim();
+ try{
+  let d;
+  try{d=JSON.parse(raw)}catch(e){d={type:"raw",value:raw}}
+  const box=$("identityOpenStatus");box.innerHTML="";
+  const pre=document.createElement("pre");pre.style.whiteSpace="pre-wrap";
+  pre.textContent=JSON.stringify(d,null,2);box.appendChild(pre);
+  let url=null;
+  if(d.app==="SecureQRVault"&&d.type==="identity"){
+   if(d.identityType==="website"||d.identityType==="youtube")url=d.value;
+   else if(d.identityType==="phone")url="tel:"+d.value;
+   else if(d.identityType==="secret"){
+    const pass=prompt("Secret खोलने के लिए Passphrase डालें:");
+    if(pass)decryptSecret(d.value,pass,box);
+   }
+  }else if(/^https?:\/\//i.test(raw))url=raw;
+  if(url){
+   const b=document.createElement("button");b.textContent="Open Link / Contact";
+   b.onclick=()=>{
+    if(url.startsWith("http"))window.open(url,"_blank","noopener");
+    else location.href=url;
+   };
+   box.appendChild(b);
+  }
+ }catch(e){$("identityOpenStatus").textContent="QR data read नहीं हुआ: "+e.message}
+}
+async function decryptSecret(value,pass,box){
+ try{
+  const enc=new TextEncoder(),dec=new TextDecoder(),c=value.cipher;
+  const from64=s=>Uint8Array.from(atob(s),ch=>ch.charCodeAt(0));
+  const salt=from64(c.salt),iv=from64(c.iv),data=from64(c.data);
+  const mat=await crypto.subtle.importKey("raw",enc.encode(pass),"PBKDF2",false,["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:150000,hash:"SHA-256"},mat,{name:"AES-GCM",length:256},false,["decrypt"]);
+  const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,data);
+  const p=document.createElement("p");p.textContent="Decrypted Secret: "+dec.decode(plain);box.appendChild(p);
+ }catch(e){alert("गलत Passphrase या invalid encrypted data।")}
+}
+async function startScan(){
+ if(!("BarcodeDetector" in window)){ $("scanStatus").textContent="इस ब्राउज़र में built-in QR scanner उपलब्ध नहीं है। दूसरे फोन से QR scan करके text यहाँ paste करें।";return}
+ try{
+  const detector=new BarcodeDetector({formats:["qr_code"]});
+  scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+  $("scanVideo").srcObject=scanStream;await $("scanVideo").play();
+  $("scanStatus").textContent="Camera running. QR को कैमरे के सामने रखें।";
+  const scan=async()=>{
+   if(!scanStream)return;
+   try{
+    const codes=await detector.detect($("scanVideo"));
+    if(codes.length){
+     $("scanPaste").value=codes[0].rawValue;
+     $("scanStatus").textContent="QR detected!";
+     handleScannedText();stopScan();return
+    }
+   }catch(e){}
+   scanLoop=requestAnimationFrame(scan);
+  };scan();
+ }catch(e){$("scanStatus").textContent="Camera error: "+e.message+" — HTTPS/permission जाँचें।"}
+}
+function stopScan(){
+ if(scanLoop)cancelAnimationFrame(scanLoop);scanLoop=null;
+ if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
+ $("scanVideo").srcObject=null;
+  }
+  function handleScannedText(){
+ const t=$("scanPaste").value.trim();if(!t)return;
+ try{
+  const d=JSON.parse(t);
+  if(d.type==="gift"){showTab("gift");$("giftPayload").value=t;$("giftOpened").textContent="Gift payload loaded. Press Open Gift."}
+  else if(d.type==="message"){showTab("message");$("incomingMessage").value=t;openMessage()}
+  else {showTab("identity");$("identityOpenText").value=t;openIdentity()}
+ }catch(e){
+  showTab("identity");$("identityOpenText").value=t;openIdentity();
+ }
+}
+function renderFiles(type){
+ const arr=userData()[type]||[];
+ const box=$("filesList");box.innerHTML="<h3>"+({photos:"My Photo Designs",posters:"My Posters",identities:"My QR Identities",gifts:"My Gift Collection",messages:"Message History"}[type]||type)+"</h3>";
+ if(!arr.length){box.innerHTML+="<p>अभी कोई फाइल सेव नहीं है।</p>";return}
+ arr.forEach((f,i)=>{
+  const el=document.createElement("div");el.className="file";
+  const name=f.name||f.title||f.receiver||f.theme||type;
+  el.innerHTML="<strong>"+esc(name)+"</strong><br><small>"+esc(f.created||f.opened||"")+"</small>";
+  if(f.data){
+   const img=document.createElement("img");img.src=f.data;img.style.cssText="max-width:100%;max-height:240px;display:block;margin-top:10px;border-radius:8px";el.appendChild(img);
+   const dl=document.createElement("button");dl.textContent="Download";dl.onclick=()=>{const a=document.createElement("a");a.href=f.data;a.download=(type==="posters"?"poster":"photo")+"-"+i+".jpg";a.click()};el.appendChild(dl);
+  }
+  if(f.payload){
+   const ta=document.createElement("textarea");ta.value=f.payload;ta.readOnly=true;el.appendChild(ta);
+   const qr=document.createElement("button");qr.textContent="Show QR";qr.onclick=()=>makeQR(f.payload,"fileQR"+i);el.appendChild(qr);
+   const qrBox=document.createElement("div");qrBox.id="fileQR"+i;el.appendChild(qrBox);
+  }
+  if(f.text&&!f.data&&!f.payload){
+   const p=document.createElement("p");p.textContent=f.text;el.appendChild(p);
+  }
+  const del=document.createElement("button");del.className="red";del.textContent="Delete";
+  del.onclick=()=>{if(confirm("इस फाइल को delete करें?")){arr.splice(i,1);saveUser();renderFiles(type)}};
+  el.appendChild(del);box.appendChild(el);
+ });
+}
+function exportBackup(){
+ const blob=new Blob([JSON.stringify({exported:stamp(),user:userData()},null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="secure-qr-vault-backup.json";a.click();URL.revokeObjectURL(a.href);
+ $("settingsStatus").textContent="Backup file तैयार हुई। इसे सुरक्षित रखें। इसमें आपकी local data हो सकती है।";
+}
+function importBackup(){
+ const f=$("backupFile").files[0];if(!f){alert("पहले JSON backup चुनें।");return}
+ const r=new FileReader();
+ r.onload=()=>{
+  try{
+   const d=JSON.parse(r.result);
+   const u=d.user||d;
+   if(!u||typeof u!=="object")throw Error("Invalid backup");
+   ["photos","posters","identities","gifts","messages"].forEach(k=>{if(!Array.isArray(u[k]))u[k]=[]});
+   if(confirm("Current collections replace करके backup restore करें?")){
+    const key=currentUser;u.name=userData().name;u.password=userData().password;
+    db.users[key]=u;saveDB();updateCoins();
+    $("settingsStatus").textContent="Backup restored.";
+   }
+  }catch(e){$("settingsStatus").textContent="Backup error: "+e.message}
+ };
+ r.readAsText(f);
+}
+function clearCollections(){
+ if(!confirm("सभी Photo, Poster, QR Identity, Gift और Message collections delete करें?"))return;
+ ["photos","posters","identities","gifts","messages"].forEach(k=>userData()[k]=[]);
+ saveUser();$("filesList").innerHTML="";$("settingsStatus").textContent="Collections deleted.";
+}
+function redrawPosterSafe(){redrawPoster()}
+const posterInputs=["posterTitle","posterSub","posterBg","posterColor"];
+posterInputs.forEach(id=>$(id).addEventListener("input",()=>{if(!$("poster").classList.contains("hidden"))redrawPoster()}));
+["giftSender","giftReceiver","giftText","giftSize","giftBg","giftFg"].forEach(id=>{
+ $(id).addEventListener("input",previewGift);
+});
+["photoBg","photoText","photoColor","photoSize"].forEach(id=>{
+ $(id).addEventListener("input",redrawEditor);
+});
+$("posterTheme").addEventListener("change",applyPosterTheme);
+
+(function boot(){
+ db=loadDB();
+ const session=localStorage.getItem(SESSIONKEY);
+ if(session&&db.users[session]){
+  currentUser=session;
+  $("loginScreen").classList.add("hidden");$("app").classList.remove("hidden");
+  $("accountBar").classList.remove("hidden");
+  const today=new Date().toDateString();
+  if(userData().lastReward!==today){userData().coins=(userData().coins||0)+20000;userData().lastReward=today;saveUser()}
+  updateCoins();initEditors();applyGiftTheme();identityFields();
+ }else{
+  $("loginScreen").classList.remove("hidden");
+ }
+})();
+</script>
+</body>
+</html>
